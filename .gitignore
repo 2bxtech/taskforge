@@ -178,4 +178,4 @@ scratch/
 
 # Allow specific documentation files
 !docs/**/*.txt
-!examples/**/*.txt
+!examples/**/*.txt*.diff
