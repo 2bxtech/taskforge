@@ -49,6 +49,11 @@ type Task struct {
 	Queue       string    `json:"queue" bson:"queue"`               // Target queue name
 	
 	// Payload and metadata
+	// Payload contains task-specific data as a raw JSON object.
+	// The expected structure of Payload depends on the Type field and should match
+	// the corresponding typed payload struct defined in payloads.go (e.g., WebhookPayload, EmailPayload, etc.).
+	// When creating or processing a Task, marshal/unmarshal Payload to/from the appropriate struct
+	// based on Task.Type. See payloads.go for definitions and expected formats.
 	Payload     json.RawMessage `json:"payload" bson:"payload"`       // Task-specific data
 	Metadata    map[string]interface{} `json:"metadata" bson:"metadata"` // Additional metadata
 	
@@ -77,6 +82,24 @@ type Task struct {
 	
 	// Deduplication
 	DedupeKey    string `json:"dedupe_key,omitempty" bson:"dedupe_key"`     // For preventing duplicates
+}
+
+// UnmarshalPayload unmarshals the task payload into the provided interface
+// Example:
+//   var webhook WebhookPayload
+//   err := task.UnmarshalPayload(&webhook)
+func (t *Task) UnmarshalPayload(v interface{}) error {
+	return json.Unmarshal(t.Payload, v)
+}
+
+// SetPayload marshals the provided value and sets it as the task payload
+func (t *Task) SetPayload(v interface{}) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	t.Payload = data
+	return nil
 }
 
 // TaskResult represents the outcome of task execution
