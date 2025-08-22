@@ -282,6 +282,9 @@ func (r *Queue) GetQueueStats(ctx context.Context, queue string) (*types.QueueSt
 		if err != nil && err != redis.Nil {
 			return fmt.Errorf("failed to get priority count: %w", err)
 		}
+		if err == redis.Nil {
+			priorityCount = 0
+		}
 
 		stats = &types.QueueStats{
 			QueueName:    queue,
