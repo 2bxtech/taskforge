@@ -278,12 +278,9 @@ func (r *Queue) GetQueueStats(ctx context.Context, queue string) (*types.QueueSt
 			pendingTasks = streamInfo.Length
 		}
 
-		priorityCount, err := priorityCountCmd.Result()
+		_, err = priorityCountCmd.Result()
 		if err != nil && err != redis.Nil {
 			return fmt.Errorf("failed to get priority count: %w", err)
-		}
-		if err == redis.Nil {
-			priorityCount = 0
 		}
 
 		stats = &types.QueueStats{
@@ -293,7 +290,7 @@ func (r *Queue) GetQueueStats(ctx context.Context, queue string) (*types.QueueSt
 			TasksByPriority: map[types.Priority]int64{
 				types.PriorityCritical: 0,
 				types.PriorityHigh:     0,
-				types.PriorityNormal:   priorityCount,
+				types.PriorityNormal:   0, // TODO: Implement proper priority counting
 				types.PriorityLow:      0,
 			},
 			TasksByType: map[types.TaskType]int64{},
