@@ -59,26 +59,41 @@ jobs:
         version: v1.55.2
         args: --timeout=5m --issues-exit-code=1
 
-    - name: Install Gosec
-      run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+    - name: Install security tools
+      run: |
+        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        go install golang.org/x/vuln/cmd/govulncheck@latest
 
-    - name: Run Gosec Security Scanner
+    - name: Run Gosec security scan
       run: |
         echo "🔒 Running Gosec security scanner..."
-        gosec -fmt sarif -out gosec-results.sarif ./... || echo "Gosec completed with findings"
-        echo "📄 Gosec text output:"
+        gosec -fmt json -out gosec.json ./... || true
+        gosec -fmt sarif -out gosec-results.sarif ./... || true
         gosec -fmt text ./... || true
       continue-on-error: true
 
-    - name: Verify Gosec SARIF file exists
+    - name: Create SARIF file if missing
       run: |
-        if [ -f "gosec-results.sarif" ]; then
-          echo "✅ Gosec SARIF file created successfully"
-          echo "📊 File size: $(wc -c < gosec-results.sarif) bytes"
-        else
-          echo "❌ Gosec SARIF file not found, creating empty SARIF"
-          echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","runs":[]}' > gosec-results.sarif
+        if [ ! -f "gosec-results.sarif" ] || [ ! -s "gosec-results.sarif" ]; then
+          echo "📝 Creating fallback SARIF file..."
+          cat > gosec-results.sarif << 'EOF'
+        {
+          "version": "2.1.0",
+          "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+          "runs": [{
+            "tool": {
+              "driver": {
+                "name": "gosec",
+                "informationUri": "https://github.com/securecodewarrior/gosec",
+                "version": "2.0.0"
+              }
+            },
+            "results": []
+          }]
+        }
+        EOF
         fi
+        echo "✅ SARIF file ready: $(wc -c < gosec-results.sarif) bytes"
 
     - name: Upload Gosec SARIF file
       uses: github/codeql-action/upload-sarif@v3
@@ -87,11 +102,10 @@ jobs:
         sarif_file: gosec-results.sarif
         category: gosec
 
-    - name: Run govulncheck
+    - name: Run vulnerability scan
       run: |
-        echo "🔍 Installing and running govulncheck..."
-        go install golang.org/x/vuln/cmd/govulncheck@latest
-        govulncheck ./... || echo "Vulnerabilities found, check output above"
+        echo "🔍 Running govulncheck..."
+        govulncheck ./... || echo "Vulnerability scan completed with findings"
       continue-on-error: true
 
     - name: Run unit tests
@@ -122,6 +136,7 @@ jobs:
           coverage.out
           coverage.html
           gosec-results.sarif
+          gosec.json
         retention-days: 30
 
   codeql:
@@ -165,9 +180,10 @@ jobs:
         go-version: '1.24'
 
     - name: Build binaries
-      run: |
-        make build
-        make build-demo
+      run: make build
+
+    - name: Build demo
+      run: make build-demo
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
