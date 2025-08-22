@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -168,31 +169,11 @@ func isRetryableError(err error) bool {
 		}
 
 		for _, pattern := range retryablePatterns {
-			if contains(errStr, pattern) {
+			if strings.Contains(errStr, pattern) {
 				return true
 			}
 		}
 	}
 
 	return false
-}
-
-// contains checks if a string contains a substring (case-insensitive)
-func contains(str, substr string) bool {
-	return len(str) >= len(substr) &&
-		(str == substr ||
-			(len(str) > len(substr) &&
-				(str[:len(substr)] == substr ||
-					str[len(str)-len(substr):] == substr ||
-					indexOfSubstring(str, substr) >= 0)))
-}
-
-// indexOfSubstring finds the index of a substring in a string
-func indexOfSubstring(str, substr string) int {
-	for i := 0; i <= len(str)-len(substr); i++ {
-		if str[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }

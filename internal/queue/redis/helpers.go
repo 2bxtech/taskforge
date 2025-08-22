@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/2bxtech/taskforge/pkg/types"
@@ -319,7 +320,7 @@ func (r *Queue) ListQueues(ctx context.Context) ([]string, error) {
 			if len(key) > len(r.config.StreamPrefix) {
 				queueName := key[len(r.config.StreamPrefix):]
 				// Skip DLQ streams
-				if !contains(queueName, r.config.DLQSuffix) {
+				if !strings.Contains(queueName, r.config.DLQSuffix) {
 					queueSet[queueName] = true
 				}
 			}

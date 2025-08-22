@@ -201,18 +201,16 @@ func TestQueueBackendRegistry_Create(t *testing.T) {
 
 func TestFIFOStrategy(t *testing.T) {
 	strategy := &FIFOStrategy{}
-	// Test that we can create the strategy successfully
-	// The nil check was flagged as "impossible condition" because
-	// struct literals always return non-nil pointers
+	// FIFOStrategy implements first-in-first-out task processing
+	// for maintaining task execution order guarantees
 	t.Logf("FIFOStrategy created successfully: %T", strategy)
 	// Note: Testing Enqueue/Dequeue would require a real backend implementation
 }
 
 func TestPriorityStrategy(t *testing.T) {
 	strategy := &PriorityStrategy{}
-	// Test that we can create the strategy successfully
-	// The nil check was flagged as "impossible condition" because
-	// struct literals always return non-nil pointers
+	// PriorityStrategy implements priority-based task processing
+	// with higher priority tasks processed before lower priority ones
 	t.Logf("PriorityStrategy created successfully: %T", strategy)
 	// Note: Testing Enqueue/Dequeue would require a real backend implementation
 }

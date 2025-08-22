@@ -40,5 +40,6 @@ echo "📤 Enqueuing test tasks..."
 echo "📊 Checking queue stats..."
 # $BIN_CLI queue stats default
 
-echo "📝 CLI smoke test - placeholder for Phase 2B implementation"
+echo "🧪 CLI smoke test is a Phase 2B implementation stub."
+echo "   Actual test logic will be added when CLI commands are ready."
 echo "✅ Smoke test framework ready for CLI implementation"
