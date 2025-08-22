@@ -39,6 +39,12 @@ jobs:
       - name: Go mod verify
         run: go mod verify
 
+      - name: Debug Go modules
+        run: |
+          go version
+          go list -m all
+          go mod graph | head -10
+
       - name: go vet
         run: go vet ./...
 
@@ -47,6 +53,7 @@ jobs:
         with:
           version: v1.55.2
           args: --timeout=5m
+          skip-cache: false
 
       - name: Build binaries
         run: |
