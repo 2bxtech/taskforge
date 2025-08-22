@@ -9,8 +9,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisQueue implements the QueueBackend interface using Redis Streams
-type RedisQueue struct {
+// Queue implements the QueueBackend interface using Redis Streams
+type Queue struct {
 	connMgr    *ConnectionManager
 	config     *Config
 	client     *redis.Client
@@ -19,7 +19,7 @@ type RedisQueue struct {
 }
 
 // NewRedisQueue creates a new Redis queue backend
-func NewRedisQueue(config *Config, logger types.Logger) (*RedisQueue, error) {
+func NewRedisQueue(config *Config, logger types.Logger) (*Queue, error) {
 	if config == nil {
 		return nil, fmt.Errorf("redis config is required")
 	}
@@ -42,7 +42,7 @@ func NewRedisQueue(config *Config, logger types.Logger) (*RedisQueue, error) {
 		return nil, fmt.Errorf("redis health check failed: %w", err)
 	}
 
-	queue := &RedisQueue{
+	queue := &Queue{
 		connMgr:    connMgr,
 		config:     connMgr.GetConfig(),
 		client:     connMgr.GetClient(),
@@ -59,7 +59,7 @@ func NewRedisQueue(config *Config, logger types.Logger) (*RedisQueue, error) {
 }
 
 // Enqueue adds a task to the specified queue
-func (r *RedisQueue) Enqueue(ctx context.Context, task *types.Task) error {
+func (r *Queue) Enqueue(ctx context.Context, task *types.Task) error {
 	if task == nil {
 		return fmt.Errorf("task is required")
 	}
@@ -144,7 +144,7 @@ func (r *RedisQueue) Enqueue(ctx context.Context, task *types.Task) error {
 }
 
 // Dequeue retrieves and claims a task from the specified queue
-func (r *RedisQueue) Dequeue(ctx context.Context, queue string, timeout time.Duration) (*types.Task, error) {
+func (r *Queue) Dequeue(ctx context.Context, queue string, timeout time.Duration) (*types.Task, error) {
 	if queue == "" {
 		queue = "default"
 	}
@@ -196,7 +196,7 @@ func (r *RedisQueue) Dequeue(ctx context.Context, queue string, timeout time.Dur
 }
 
 // Ack acknowledges successful task completion
-func (r *RedisQueue) Ack(ctx context.Context, taskID string) error {
+func (r *Queue) Ack(ctx context.Context, taskID string) error {
 	if taskID == "" {
 		return fmt.Errorf("task ID is required")
 	}
@@ -255,7 +255,7 @@ func (r *RedisQueue) Ack(ctx context.Context, taskID string) error {
 }
 
 // Nack negatively acknowledges a task (marks as failed)
-func (r *RedisQueue) Nack(ctx context.Context, taskID string, reason string) error {
+func (r *Queue) Nack(ctx context.Context, taskID string, reason string) error {
 	if taskID == "" {
 		return fmt.Errorf("task ID is required")
 	}
@@ -276,14 +276,13 @@ func (r *RedisQueue) Nack(ctx context.Context, taskID string, reason string) err
 
 		if shouldRetry {
 			return r.scheduleRetry(ctx, task, reason)
-		} else {
-			return r.MoveToDLQ(ctx, taskID, reason)
 		}
+		return r.MoveToDLQ(ctx, taskID, reason)
 	})
 }
 
 // EnqueueBatch enqueues multiple tasks atomically
-func (r *RedisQueue) EnqueueBatch(ctx context.Context, tasks []*types.Task) error {
+func (r *Queue) EnqueueBatch(ctx context.Context, tasks []*types.Task) error {
 	if len(tasks) == 0 {
 		return nil
 	}
@@ -353,7 +352,7 @@ func (r *RedisQueue) EnqueueBatch(ctx context.Context, tasks []*types.Task) erro
 }
 
 // DequeueBatch retrieves multiple tasks from the queue
-func (r *RedisQueue) DequeueBatch(ctx context.Context, queue string, count int, timeout time.Duration) ([]*types.Task, error) {
+func (r *Queue) DequeueBatch(ctx context.Context, queue string, count int, timeout time.Duration) ([]*types.Task, error) {
 	if count <= 0 {
 		return nil, fmt.Errorf("count must be greater than 0")
 	}
@@ -392,7 +391,7 @@ func (r *RedisQueue) DequeueBatch(ctx context.Context, queue string, count int, 
 }
 
 // GetTask retrieves a task by ID
-func (r *RedisQueue) GetTask(ctx context.Context, taskID string) (*types.Task, error) {
+func (r *Queue) GetTask(ctx context.Context, taskID string) (*types.Task, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID is required")
 	}
@@ -434,7 +433,7 @@ func (r *RedisQueue) GetTask(ctx context.Context, taskID string) (*types.Task, e
 }
 
 // UpdateTask updates an existing task
-func (r *RedisQueue) UpdateTask(ctx context.Context, task *types.Task) error {
+func (r *Queue) UpdateTask(ctx context.Context, task *types.Task) error {
 	if task == nil || task.ID == "" {
 		return fmt.Errorf("task with ID is required")
 	}
@@ -467,7 +466,7 @@ func (r *RedisQueue) UpdateTask(ctx context.Context, task *types.Task) error {
 }
 
 // DeleteTask removes a task completely
-func (r *RedisQueue) DeleteTask(ctx context.Context, taskID string) error {
+func (r *Queue) DeleteTask(ctx context.Context, taskID string) error {
 	if taskID == "" {
 		return fmt.Errorf("task ID is required")
 	}
@@ -509,7 +508,7 @@ func (r *RedisQueue) DeleteTask(ctx context.Context, taskID string) error {
 
 // calculatePriorityScore calculates a score for priority ordering
 // Higher priority tasks get lower scores (processed first)
-func (r *RedisQueue) calculatePriorityScore(priority types.Priority, createdAt time.Time) float64 {
+func (r *Queue) calculatePriorityScore(priority types.Priority, createdAt time.Time) float64 {
 	// Base priority scores (lower = higher priority)
 	priorityScores := map[types.Priority]float64{
 		types.PriorityCritical: 1000,
@@ -531,11 +530,11 @@ func (r *RedisQueue) calculatePriorityScore(priority types.Priority, createdAt t
 }
 
 // HealthCheck verifies the Redis connection and functionality
-func (r *RedisQueue) HealthCheck(ctx context.Context) error {
+func (r *Queue) HealthCheck(ctx context.Context) error {
 	return r.connMgr.HealthCheck(ctx)
 }
 
 // Close closes the Redis connection
-func (r *RedisQueue) Close() error {
+func (r *Queue) Close() error {
 	return r.connMgr.Close()
 }

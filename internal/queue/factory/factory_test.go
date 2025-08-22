@@ -9,11 +9,11 @@ import (
 // MockLogger for testing
 type MockLogger struct{}
 
-func (m *MockLogger) Debug(msg string, fields ...types.Field) {}
-func (m *MockLogger) Info(msg string, fields ...types.Field)  {}
-func (m *MockLogger) Warn(msg string, fields ...types.Field)  {}
-func (m *MockLogger) Error(msg string, fields ...types.Field) {}
-func (m *MockLogger) With(fields ...types.Field) types.Logger { return m }
+func (m *MockLogger) Debug(_ string, _ ...types.Field)   {}
+func (m *MockLogger) Info(_ string, _ ...types.Field)    {}
+func (m *MockLogger) Warn(_ string, _ ...types.Field)    {}
+func (m *MockLogger) Error(_ string, _ ...types.Field)   {}
+func (m *MockLogger) With(_ ...types.Field) types.Logger { return m }
 
 func TestNewQueueBackendFactory(t *testing.T) {
 	factory := NewQueueBackendFactory()
@@ -153,7 +153,7 @@ func TestQueueBackendRegistry_Register(t *testing.T) {
 	registry := NewQueueBackendRegistry()
 
 	// Register a mock backend
-	registry.Register("mock", func(config *types.QueueConfig, logger types.Logger) (types.QueueBackend, error) {
+	registry.Register("mock", func(_ *types.QueueConfig, _ types.Logger) (types.QueueBackend, error) {
 		return nil, nil
 	})
 

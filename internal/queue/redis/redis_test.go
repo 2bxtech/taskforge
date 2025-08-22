@@ -41,7 +41,7 @@ func (m *MockLogger) Error(msg string, fields ...types.Field) {
 	m.logs = append(m.logs, LogEntry{Level: "error", Message: msg, Fields: fields})
 }
 
-func (m *MockLogger) With(fields ...types.Field) types.Logger {
+func (m *MockLogger) With(_ ...types.Field) types.Logger {
 	return m // Simplified for testing
 }
 

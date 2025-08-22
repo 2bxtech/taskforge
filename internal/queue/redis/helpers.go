@@ -11,7 +11,7 @@ import (
 )
 
 // initializeConsumerGroups creates consumer groups for the specified queues
-func (r *RedisQueue) initializeConsumerGroups(ctx context.Context) error {
+func (r *Queue) initializeConsumerGroups(ctx context.Context) error {
 	// Default queues to initialize
 	defaultQueues := []string{"default", "high_priority", "low_priority"}
 
@@ -28,7 +28,7 @@ func (r *RedisQueue) initializeConsumerGroups(ctx context.Context) error {
 }
 
 // ensureConsumerGroup creates a consumer group if it doesn't exist
-func (r *RedisQueue) ensureConsumerGroup(ctx context.Context, queue string) error {
+func (r *Queue) ensureConsumerGroup(ctx context.Context, queue string) error {
 	streamName := r.config.GetStreamName(queue)
 
 	// Try to create the consumer group
@@ -70,7 +70,7 @@ func (r *RedisQueue) ensureConsumerGroup(ctx context.Context, queue string) erro
 }
 
 // claimPendingMessage attempts to claim pending messages from other consumers
-func (r *RedisQueue) claimPendingMessage(ctx context.Context, queue string) (*types.Task, error) {
+func (r *Queue) claimPendingMessage(ctx context.Context, queue string) (*types.Task, error) {
 	streamName := r.config.GetStreamName(queue)
 
 	// Get pending messages for the consumer group
@@ -120,7 +120,7 @@ func (r *RedisQueue) claimPendingMessage(ctx context.Context, queue string) (*ty
 }
 
 // readNewMessage reads a new message from the stream
-func (r *RedisQueue) readNewMessage(ctx context.Context, queue string, timeout time.Duration) (*types.Task, error) {
+func (r *Queue) readNewMessage(ctx context.Context, queue string, timeout time.Duration) (*types.Task, error) {
 	streamName := r.config.GetStreamName(queue)
 	consumerName := r.config.GetConsumerName("reader")
 
@@ -150,7 +150,7 @@ func (r *RedisQueue) readNewMessage(ctx context.Context, queue string, timeout t
 }
 
 // parseStreamEntry parses a Redis stream entry into a task
-func (r *RedisQueue) parseStreamEntry(ctx context.Context, entry redis.XMessage) (*types.Task, error) {
+func (r *Queue) parseStreamEntry(ctx context.Context, entry redis.XMessage) (*types.Task, error) {
 	taskID, exists := entry.Values["task_id"]
 	if !exists {
 		return nil, fmt.Errorf("task_id not found in stream entry")
@@ -187,7 +187,7 @@ func (r *RedisQueue) parseStreamEntry(ctx context.Context, entry redis.XMessage)
 }
 
 // findStreamEntryID finds the stream entry ID for a specific task
-func (r *RedisQueue) findStreamEntryID(ctx context.Context, streamName, taskID string) (string, error) {
+func (r *Queue) findStreamEntryID(ctx context.Context, streamName, taskID string) (string, error) {
 	// Search through recent stream entries to find the one with matching task_id
 	entries, err := r.client.XRevRange(ctx, streamName, "+", "-").Result()
 	if err != nil {
@@ -206,7 +206,7 @@ func (r *RedisQueue) findStreamEntryID(ctx context.Context, streamName, taskID s
 }
 
 // scheduleRetry schedules a task for retry
-func (r *RedisQueue) scheduleRetry(ctx context.Context, task *types.Task, reason string) error {
+func (r *Queue) scheduleRetry(ctx context.Context, task *types.Task, reason string) error {
 	// Calculate next retry time
 	nextRetry := r.calculateNextRetryTime(task)
 
@@ -226,7 +226,7 @@ func (r *RedisQueue) scheduleRetry(ctx context.Context, task *types.Task, reason
 }
 
 // calculateNextRetryTime calculates when to retry a task next
-func (r *RedisQueue) calculateNextRetryTime(task *types.Task) time.Time {
+func (r *Queue) calculateNextRetryTime(task *types.Task) time.Time {
 	// Exponential backoff: 1s, 2s, 4s, 8s, etc. up to max of 5 minutes
 	delay := time.Duration(1<<uint(task.CurrentRetries)) * time.Second
 	maxDelay := 5 * time.Minute
@@ -247,7 +247,7 @@ func timePtr(t time.Time) *time.Time {
 }
 
 // GetQueueStats returns statistics for a specific queue
-func (r *RedisQueue) GetQueueStats(ctx context.Context, queue string) (*types.QueueStats, error) {
+func (r *Queue) GetQueueStats(ctx context.Context, queue string) (*types.QueueStats, error) {
 	if queue == "" {
 		queue = "default"
 	}
@@ -303,7 +303,7 @@ func (r *RedisQueue) GetQueueStats(ctx context.Context, queue string) (*types.Qu
 }
 
 // ListQueues returns a list of all known queues
-func (r *RedisQueue) ListQueues(ctx context.Context) ([]string, error) {
+func (r *Queue) ListQueues(ctx context.Context) ([]string, error) {
 	var queues []string
 	err := r.connMgr.WithRetry(ctx, func() error {
 		// Search for all stream keys with our prefix
@@ -338,7 +338,7 @@ func (r *RedisQueue) ListQueues(ctx context.Context) ([]string, error) {
 }
 
 // PurgeQueue removes all tasks from a queue
-func (r *RedisQueue) PurgeQueue(ctx context.Context, queue string) error {
+func (r *Queue) PurgeQueue(ctx context.Context, queue string) error {
 	if queue == "" {
 		return fmt.Errorf("queue name is required")
 	}
@@ -370,7 +370,7 @@ func (r *RedisQueue) PurgeQueue(ctx context.Context, queue string) error {
 }
 
 // MoveToDLQ moves a task to the dead letter queue
-func (r *RedisQueue) MoveToDLQ(ctx context.Context, taskID string, reason string) error {
+func (r *Queue) MoveToDLQ(ctx context.Context, taskID string, reason string) error {
 	if taskID == "" {
 		return fmt.Errorf("task ID is required")
 	}
@@ -443,7 +443,7 @@ func (r *RedisQueue) MoveToDLQ(ctx context.Context, taskID string, reason string
 }
 
 // RequeueFromDLQ moves a task back from dead letter queue to normal queue
-func (r *RedisQueue) RequeueFromDLQ(ctx context.Context, taskID string) error {
+func (r *Queue) RequeueFromDLQ(ctx context.Context, taskID string) error {
 	if taskID == "" {
 		return fmt.Errorf("task ID is required")
 	}
@@ -475,7 +475,7 @@ func (r *RedisQueue) RequeueFromDLQ(ctx context.Context, taskID string) error {
 }
 
 // ScheduleRetry schedules a task for retry at a specific time
-func (r *RedisQueue) ScheduleRetry(ctx context.Context, taskID string, retryAt time.Time) error {
+func (r *Queue) ScheduleRetry(ctx context.Context, taskID string, retryAt time.Time) error {
 	if taskID == "" {
 		return fmt.Errorf("task ID is required")
 	}
@@ -506,7 +506,7 @@ func (r *RedisQueue) ScheduleRetry(ctx context.Context, taskID string, retryAt t
 }
 
 // GetScheduledTasks returns tasks scheduled to run before the specified time
-func (r *RedisQueue) GetScheduledTasks(ctx context.Context, before time.Time, limit int) ([]*types.Task, error) {
+func (r *Queue) GetScheduledTasks(ctx context.Context, before time.Time, limit int) ([]*types.Task, error) {
 	// This is a simplified implementation
 	// In production, you'd want a more sophisticated scheduling system
 	var tasks []*types.Task
