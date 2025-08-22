@@ -1,6 +1,11 @@
 # 🔨 TaskForge
 
-A distributed task queue system side project built with Go. Exploring modern distributed systems patterns and potentially developing into a portfolio piece.
+[![CI](https://img.shields.io/github/actions/workflow/status/2bxtech/taskforge/ci.yml?branch=main&label=build)](https://github.com/2bxtech/taskforge/actions/workflows/ci.yml)
+[![Integration](https://img.shields.io/github/actions/workflow/status/2bxtech/taskforge/integration.yml?branch=main&label=integration)](https://github.com/2bxtech/taskforge/actions/workflows/integration.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/2bxtech/taskforge)](https://goreportcard.com/report/github.com/2bxtech/taskforge)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A distributed task queue system built with Go, demonstrating enterprise-grade patterns and distributed systems architecture.
 
 ## 🏗️ Current Status
 
@@ -10,9 +15,33 @@ A distributed task queue system side project built with Go. Exploring modern dis
 - 6 task types: webhooks, email, image processing, data processing, scheduled tasks, batch operations
 - Configuration system and development tooling
 
-**Phase 2 Planned**: Redis implementation and working processors
+**Phase 2A Complete**: Redis Queue Backend ✅
+- Production-ready Redis Streams implementation with consumer groups
+- Factory and Strategy patterns for pluggable queue backends
+- Priority queue system with FIFO ordering within priority levels
+- Comprehensive error handling with exponential backoff retry
+- Dead letter queue (DLQ) handling for failed tasks
+- Batch operations for high-throughput scenarios
+- Comprehensive CI/CD pipeline with security scanning and automated testing
 
-## 🚀 Goals
+**Phase 2B Next**: Worker Engine and CLI interface
+
+## 🚀 Quick Demo
+
+```bash
+# Clone and setup
+git clone https://github.com/2bxtech/taskforge.git
+cd taskforge
+make dev-setup
+
+# Start Redis (requires Docker)
+docker run -d -p 6379:6379 redis:7-alpine
+
+# Run the Redis queue demo
+make demo
+```
+
+## 🎯 Goals
 
 Building a production-quality distributed task queue to explore:
 - Go concurrency patterns

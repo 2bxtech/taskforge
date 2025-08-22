@@ -84,9 +84,38 @@ test: ## Run all tests
 
 test-coverage: ## Run tests with coverage
 	@echo "$(BLUE)Running tests with coverage...$(NC)"
-	$(GOTEST) -v -coverprofile=coverage.out ./...
-	$(GOCMD) tool cover -html=coverage.out -o coverage.html
-	@echo "$(GREEN)Coverage report generated: coverage.html$(NC)"
+	@mkdir -p build/coverage
+	$(GOTEST) -race -covermode=atomic -coverprofile=build/coverage/cover.out -v ./...
+	$(GOCMD) tool cover -func=build/coverage/cover.out | tee build/coverage/coverage.txt
+	$(GOCMD) tool cover -html=build/coverage/cover.out -o build/coverage/coverage.html
+	@echo "$(GREEN)Coverage report generated: build/coverage/coverage.html$(NC)"
+
+ci: lint test ## Run CI pipeline locally
+	@echo "$(BLUE)Running CI pipeline...$(NC)"
+	$(GOMOD) verify
+	$(GOTEST) -race -covermode=atomic -coverprofile=coverage.out -v ./...
+	@echo "$(GREEN)CI pipeline completed successfully!$(NC)"
+
+demo: ## Run Redis queue demo
+	@echo "$(BLUE)Running TaskForge Redis Queue Demo...$(NC)"
+	@if [ -f "./examples/redis_demo.go" ]; then \
+		echo "🔨 Building and running Redis demo..."; \
+		go run ./examples/redis_demo.go; \
+	else \
+		echo "❌ Redis demo not found at ./examples/redis_demo.go"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Demo completed!$(NC)"
+
+integration-test: ## Run integration tests
+	@echo "$(BLUE)Running integration tests...$(NC)"
+	@chmod +x tests/integration/redis_demo.sh
+	@./tests/integration/redis_demo.sh
+	@if [ -f "tests/integration/smoke.sh" ]; then \
+		chmod +x tests/integration/smoke.sh; \
+		./tests/integration/smoke.sh; \
+	fi
+	@echo "$(GREEN)Integration tests completed!$(NC)"
 
 test-integration: ## Run integration tests
 	@echo "$(BLUE)Running integration tests...$(NC)"

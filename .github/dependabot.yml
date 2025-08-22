@@ -1,0 +1,49 @@
+version: 2
+updates:
+  # Go modules
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "monthly"  # Less frequent than weekly to reduce noise
+    open-pull-requests-limit: 3  # Keep it manageable
+    assignees:
+      - "2bxtech"
+    labels:
+      - "dependencies"
+      - "go"
+    # Group updates by type for cleaner management
+    groups:
+      # Group all patch updates together
+      patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      # Group minor updates for non-critical dependencies
+      minor-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+        exclude-patterns:
+          - "github.com/redis/go-redis/*"  # Keep Redis updates separate (critical)
+    # Skip patch updates for these stable dependencies
+    ignore:
+      - dependency-name: "golang.org/x/*"
+        update-types: ["version-update:semver-patch"]
+      - dependency-name: "github.com/stretchr/testify"
+        update-types: ["version-update:semver-patch"]
+
+  # GitHub Actions (keeps your CI current)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      actions-updates:
+        patterns:
+          - "*"

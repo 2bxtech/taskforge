@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-lint-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+          cache: true
+
+      - name: Cache Go build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-gobuild-
+
+      - name: Go mod download
+        run: go mod download
+
+      - name: Go mod verify
+        run: go mod verify
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.55.2
+          args: --timeout=5m
+
+      - name: Build binaries
+        run: |
+          mkdir -p bin
+          go build -o bin/taskforge-api ./cmd/api
+          go build -o bin/taskforge-cli ./cmd/cli
+          go build -o bin/taskforge-worker ./cmd/worker
+
+      - name: Run unit tests with coverage
+        run: |
+          mkdir -p build/coverage
+          go test ./... -race -covermode=atomic -coverprofile=build/coverage/cover.out -v
+          go tool cover -func=build/coverage/cover.out | tee build/coverage/coverage.txt
+          go tool cover -html=build/coverage/cover.out -o build/coverage/coverage.html
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build/coverage/
+
+      - name: Upload binaries artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskforge-binaries
+          path: bin/
+
+      # Optional: Build example/demo
+      - name: Build Redis demo
+        run: go build -o bin/redis-demo ./examples/redis_demo.go
+
+      # Optional: Docker build (uncomment when needed)
+      # - name: Build Docker image
+      #   run: docker build -t taskforge:ci .
+
+  # Security scanning
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Gosec Security Scanner
+        uses: securecodewarrior/github-action-gosec@master
+        with:
+          args: '-no-fail -fmt sarif -out results.sarif ./...'
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
