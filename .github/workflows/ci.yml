@@ -35,7 +35,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'  # Updated to stable version (1.24 doesn't exist yet)
+        go-version: '1.24.4'
         cache: true
 
     - name: Go environment diagnostics
@@ -217,7 +217,7 @@ jobs:
     - name: Set up Go (for module download)
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24.4'
         cache: true
 
     - name: Prepare Go modules for CodeQL
@@ -255,7 +255,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'  # Updated to stable version
+        go-version: '1.24.4'
         cache: true
 
     - name: Prepare dependencies
