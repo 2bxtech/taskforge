@@ -109,9 +109,9 @@ jobs:
       - name: Start Docker Compose stack
         run: |
           if [ -f "docker-compose.yml" ]; then
-            docker-compose up -d
+            docker compose up -d
             sleep 10
-            docker-compose ps
+            docker compose ps
           else
             echo "Docker Compose not yet configured - will be added in Phase 3"
           fi
@@ -126,5 +126,5 @@ jobs:
         if: always()
         run: |
           if [ -f "docker-compose.yml" ]; then
-            docker-compose down -v
+            docker compose down -v
           fi
