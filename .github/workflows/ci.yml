@@ -270,7 +270,6 @@ jobs:
     - name: Prepare dependencies
       run: |
         echo "🔧 Preparing build dependencies..."
-        go env -w GOWORK=off
         go mod download
 
     - name: Build binaries
