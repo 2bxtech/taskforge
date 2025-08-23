@@ -241,8 +241,7 @@ func (r *Queue) calculateNextRetryTime(task *types.Task) time.Time {
 
 	// Use int64 explicitly to avoid any potential overflow issues
 	// This addresses gosec G115 warning about integer overflow conversion
-	delaySeconds := int64(1) << uint(retries) // Safe: retries is bounded 0-20
-	delay := time.Duration(delaySeconds) * time.Second
+	delay := time.Duration(1<<uint(retries)) * time.Second // Safe: retries is bounded 0-20
 
 	const maxDelay = 5 * time.Minute
 	if delay > maxDelay {
