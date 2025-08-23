@@ -73,6 +73,7 @@ jobs:
         version: v1.60.3
         args: --timeout=5m --issues-exit-code=1
         install-mode: source
+        cache-key: golangci-lint.cache-Linux-go1.24.4
 
     - name: Install security tools
       run: |
