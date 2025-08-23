@@ -234,21 +234,35 @@ func (r *Queue) calculateNextRetryTime(task *types.Task) time.Time {
 		retries = 0
 	}
 	// Cap retries at 20 to prevent excessive delays and potential overflow (2^20 = ~1M seconds)
-	if retries > 20 {
-		retries = 20
+	const maxRetries = 20
+	if retries > maxRetries {
+		retries = maxRetries
 	}
 
-	delay := time.Duration(1<<uint(retries)) * time.Second
-	maxDelay := 5 * time.Minute
+	// Use int64 explicitly to avoid any potential overflow issues
+	// This addresses gosec G115 warning about integer overflow conversion
+	delaySeconds := int64(1) << uint(retries) // Safe: retries is bounded 0-20
+	delay := time.Duration(delaySeconds) * time.Second
 
+	const maxDelay = 5 * time.Minute
 	if delay > maxDelay {
 		delay = maxDelay
 	}
 
 	// Add jitter to prevent thundering herd
-	jitter := time.Duration(task.CurrentRetries*100) * time.Millisecond
+	// Using bounded calculation to ensure no overflow
+	jitter := time.Duration(min(retries*100, 5000)) * time.Millisecond
 
 	return time.Now().Add(delay + jitter)
+}
+
+// min returns the minimum of two integers
+// (Can be removed if using Go 1.21+ which has built-in min function)
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // timePtr returns a pointer to the given time
