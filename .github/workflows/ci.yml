@@ -38,9 +38,19 @@ jobs:
         go-version: '1.23'  # Updated to stable version (1.24 doesn't exist yet)
         cache: true
 
+    - name: Go environment diagnostics
+      run: |
+        echo "🔧 Go environment info:"
+        go version
+        go env GOMOD GOPROXY GOWORK
+
     - name: Verify and prepare dependencies
       run: |
-        echo "🔍 Verifying dependency integrity..."
+        echo "� Ensuring consistent module resolution..."
+        # Disable accidental workspace mode that can confuse CI resolution
+        go env -w GOWORK=off
+        
+        echo "�🔍 Verifying dependency integrity..."
         go mod verify
         
         echo "🧹 Ensuring dependencies are clean..."
@@ -49,6 +59,12 @@ jobs:
         echo "📦 Downloading dependencies..."
         go mod download
         
+        echo "✅ Asserting go-redis/v9 is in the module graph..."
+        if ! go list -m -json github.com/redis/go-redis/v9 >/dev/null 2>&1; then
+          echo "::error::Missing module github.com/redis/go-redis/v9. Make sure you ran 'go get github.com/redis/go-redis/v9 && go mod tidy' and committed go.mod/go.sum."
+          exit 1
+        fi
+        
         echo "📋 Dependency summary:"
         go list -m all | head -10
         echo "... ($(go list -m all | wc -l) total dependencies)"
@@ -56,7 +72,7 @@ jobs:
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v6
       with:
-        version: v1.55.2
+        version: v1.60.3  # Updated for Go 1.23 compatibility
         args: --timeout=5m --issues-exit-code=1
 
     - name: Install security tools
@@ -200,6 +216,22 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Set up Go (for module download)
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+        cache: true
+
+    - name: Prepare Go modules for CodeQL
+      run: |
+        echo "🔧 Preparing modules for CodeQL analysis..."
+        go env -w GOWORK=off
+        go mod tidy
+        go mod download
+        
+        echo "✅ Verifying Redis module for CodeQL..."
+        go list -m github.com/redis/go-redis/v9
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
@@ -228,6 +260,12 @@ jobs:
       with:
         go-version: '1.23'  # Updated to stable version
         cache: true
+
+    - name: Prepare dependencies
+      run: |
+        echo "🔧 Preparing build dependencies..."
+        go env -w GOWORK=off
+        go mod download
 
     - name: Build binaries
       run: |
