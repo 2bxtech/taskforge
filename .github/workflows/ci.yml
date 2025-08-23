@@ -67,12 +67,12 @@ jobs:
         go list -m all | head -10
         echo "... ($(go list -m all | wc -l) total dependencies)"
 
-    - name: Run golangci-lint (docker mode)
+    - name: Run golangci-lint (binary mode)
       uses: golangci/golangci-lint-action@v6
       with:
         version: v1.60.3
         args: --timeout=5m --issues-exit-code=1
-        install-mode: docker
+        install-mode: binary
 
     - name: Install security tools
       run: |
