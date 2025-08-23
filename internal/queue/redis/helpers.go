@@ -278,24 +278,37 @@ func (r *Queue) GetQueueStats(ctx context.Context, queue string) (*types.QueueSt
 			pendingTasks = streamInfo.Length
 		}
 
-		_, err = priorityCountCmd.Result()
+		// Get the priority count result
+		priorityCount, err := priorityCountCmd.Result()
 		if err != nil && err != redis.Nil {
-			return fmt.Errorf("failed to get priority count: %w", err)
+			// Log the error but don't fail the entire operation
+			r.logger.Warn("failed to get priority count",
+				types.Field{Key: "queue", Value: queue},
+				types.Field{Key: "error", Value: err},
+			)
+			priorityCount = 0
 		}
 
+		// Create stats with actual priority count
 		stats = &types.QueueStats{
 			QueueName:    queue,
 			PendingTasks: pendingTasks,
 			RunningTasks: 0, // Would need additional tracking
 			TasksByPriority: map[types.Priority]int64{
-				types.PriorityCritical: 0,
-				types.PriorityHigh:     0,
-				types.PriorityNormal:   0, // TODO: Implement proper priority counting
-				types.PriorityLow:      0,
+				// This is simplified - in production you'd want to
+				// track tasks by actual priority levels
+				types.PriorityNormal: priorityCount,
 			},
 			TasksByType: map[types.TaskType]int64{},
 			LastUpdated: time.Now(),
 		}
+
+		// Log the priority count for debugging
+		r.logger.Debug("queue stats retrieved",
+			types.Field{Key: "queue", Value: queue},
+			types.Field{Key: "pending_tasks", Value: pendingTasks},
+			types.Field{Key: "priority_count", Value: priorityCount},
+		)
 
 		return nil
 	})
