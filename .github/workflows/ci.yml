@@ -47,8 +47,6 @@ jobs:
     - name: Verify and prepare dependencies
       run: |
         echo "� Ensuring consistent module resolution..."
-        # Disable accidental workspace mode that can confuse CI resolution
-        go env -w GOWORK=off
         
         echo "�🔍 Verifying dependency integrity..."
         go mod verify
@@ -225,7 +223,6 @@ jobs:
     - name: Prepare Go modules for CodeQL
       run: |
         echo "🔧 Preparing modules for CodeQL analysis..."
-        go env -w GOWORK=off
         go mod tidy
         go mod download
         
