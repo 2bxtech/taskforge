@@ -93,6 +93,7 @@ func (s *TaskSerializer) ValidateTask(task *types.Task) error {
 		return fmt.Errorf("task type is required")
 	}
 
+	// Set defaults before validation
 	if task.Priority == "" {
 		task.Priority = types.PriorityNormal
 	}
@@ -115,7 +116,7 @@ func (s *TaskSerializer) ValidateTask(task *types.Task) error {
 		return fmt.Errorf("invalid task type: %s", task.Type)
 	}
 
-	// Validate priority
+	// Validate priority after default is set
 	validPriorities := map[types.Priority]bool{
 		types.PriorityCritical: true,
 		types.PriorityHigh:     true,
@@ -124,7 +125,7 @@ func (s *TaskSerializer) ValidateTask(task *types.Task) error {
 	}
 
 	if !validPriorities[task.Priority] {
-		return fmt.Errorf("invalid priority: %s", task.Priority)
+		return fmt.Errorf("invalid priority '%s': must be one of: critical, high, normal, low", task.Priority)
 	}
 
 	// Validate status

@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -521,47 +520,38 @@ func (r *Queue) ScheduleRetry(ctx context.Context, taskID string, retryAt time.T
 
 // GetScheduledTasks returns tasks scheduled to run before the specified time
 func (r *Queue) GetScheduledTasks(ctx context.Context, before time.Time, limit int) ([]*types.Task, error) {
-	// This is a simplified implementation
-	// In production, you'd want a more sophisticated scheduling system
+	// Use sorted set for efficient scheduled task retrieval
+	// This replaces the inefficient KEYS pattern scan approach
 	var tasks []*types.Task
 
 	err := r.connMgr.WithRetry(ctx, func() error {
-		// Search for tasks with retry times before the specified time
-		pattern := r.config.TaskHashPrefix + "*"
-		keys, err := r.client.Keys(ctx, pattern).Result()
-		if err != nil {
-			return fmt.Errorf("failed to get scheduled tasks: %w", err)
+		// Use ZRANGEBYSCORE to efficiently get tasks scheduled before 'before' time
+		// In a sorted set, task IDs are members and next_retry_at timestamps are scores
+		// Use a global scheduled set that contains tasks from all queues
+		scheduledSetKey := "taskforge:scheduled"
+
+		// Get task IDs with scores (timestamps) less than the 'before' time
+		results, err := r.client.ZRangeByScoreWithScores(ctx, scheduledSetKey, &rds.ZRangeBy{
+			Min:    "0",
+			Max:    fmt.Sprintf("%d", before.Unix()),
+			Offset: 0,
+			Count:  int64(limit),
+		}).Result()
+
+		if err != nil && err != rds.Nil {
+			return fmt.Errorf("failed to get scheduled tasks from sorted set: %w", err)
 		}
 
-		count := 0
-		for _, key := range keys {
-			if count >= limit {
-				break
-			}
-
-			retryAtStr, err := r.client.HGet(ctx, key, "next_retry_at").Result()
-			if err == rds.Nil {
-				continue // No retry time set
-			}
+		// Fetch the actual task data for each returned task ID
+		for _, result := range results {
+			taskID := result.Member.(string)
+			task, err := r.GetTask(ctx, taskID)
 			if err != nil {
-				continue // Skip on error
+				// Log error but continue processing other tasks
+				continue
 			}
-
-			retryAt, err := strconv.ParseInt(retryAtStr, 10, 64)
-			if err != nil {
-				continue // Skip invalid retry time
-			}
-
-			if time.Unix(retryAt, 0).Before(before) {
-				taskID := key[len(r.config.TaskHashPrefix):]
-				task, err := r.GetTask(ctx, taskID)
-				if err != nil {
-					continue // Skip on error
-				}
-				if task != nil {
-					tasks = append(tasks, task)
-					count++
-				}
+			if task != nil {
+				tasks = append(tasks, task)
 			}
 		}
 
