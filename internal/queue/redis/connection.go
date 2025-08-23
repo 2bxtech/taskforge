@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	rds "github.com/redis/go-redis/v9"
 )
 
 // ConnectionManager manages Redis connections using the Factory pattern
 type ConnectionManager struct {
-	client *redis.Client
+	client *rds.Client
 	config *Config
 }
 
@@ -28,7 +28,7 @@ func NewConnectionManager(config *Config) (*ConnectionManager, error) {
 	}
 
 	// Create Redis client with configuration
-	client := redis.NewClient(&redis.Options{
+	client := rds.NewClient(&rds.Options{
 		Addr:         config.Addr,
 		Password:     config.Password,
 		DB:           config.DB,
@@ -50,7 +50,7 @@ func NewConnectionManager(config *Config) (*ConnectionManager, error) {
 }
 
 // GetClient returns the Redis client
-func (cm *ConnectionManager) GetClient() *redis.Client {
+func (cm *ConnectionManager) GetClient() *rds.Client {
 	return cm.client
 }
 
@@ -93,7 +93,7 @@ func (cm *ConnectionManager) HealthCheck(ctx context.Context) error {
 }
 
 // GetStats returns Redis connection statistics
-func (cm *ConnectionManager) GetStats() *redis.PoolStats {
+func (cm *ConnectionManager) GetStats() *rds.PoolStats {
 	return cm.client.PoolStats()
 }
 
@@ -150,7 +150,7 @@ func isRetryableError(err error) bool {
 
 	// Check for specific Redis errors that are retryable
 	switch {
-	case err == redis.Nil:
+	case err == rds.Nil:
 		return false // Not found is not retryable
 	case err == context.Canceled:
 		return false // Context cancelled is not retryable

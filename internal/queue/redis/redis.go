@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/2bxtech/taskforge/pkg/types"
-	"github.com/redis/go-redis/v9"
+	rds "github.com/redis/go-redis/v9"
 )
 
 // Queue implements the QueueBackend interface using Redis Streams
 type Queue struct {
 	connMgr    *ConnectionManager
 	config     *Config
-	client     *redis.Client
+	client     *rds.Client
 	logger     types.Logger
 	serializer *TaskSerializer
 }
@@ -100,7 +100,7 @@ func (r *Queue) Enqueue(ctx context.Context, task *types.Task) error {
 			streamFields["deadline_at"] = task.DeadlineAt.Unix()
 		}
 
-		pipe.XAdd(ctx, &redis.XAddArgs{
+		pipe.XAdd(ctx, &rds.XAddArgs{
 			Stream: streamName,
 			MaxLen: r.config.MaxStreamLength,
 			Approx: true,
@@ -110,7 +110,7 @@ func (r *Queue) Enqueue(ctx context.Context, task *types.Task) error {
 		// Add to priority queue
 		priorityScore := r.calculatePriorityScore(task.Priority, task.CreatedAt)
 		prioritySetName := r.config.GetPrioritySetName(task.Queue)
-		pipe.ZAdd(ctx, prioritySetName, redis.Z{
+		pipe.ZAdd(ctx, prioritySetName, rds.Z{
 			Score:  priorityScore,
 			Member: task.ID,
 		})
@@ -312,7 +312,7 @@ func (r *Queue) EnqueueBatch(ctx context.Context, tasks []*types.Task) error {
 				"payload":    taskData,
 			}
 
-			pipe.XAdd(ctx, &redis.XAddArgs{
+			pipe.XAdd(ctx, &rds.XAddArgs{
 				Stream: streamName,
 				MaxLen: r.config.MaxStreamLength,
 				Approx: true,
@@ -322,7 +322,7 @@ func (r *Queue) EnqueueBatch(ctx context.Context, tasks []*types.Task) error {
 			// Add to priority queue
 			priorityScore := r.calculatePriorityScore(task.Priority, task.CreatedAt)
 			prioritySetName := r.config.GetPrioritySetName(task.Queue)
-			pipe.ZAdd(ctx, prioritySetName, redis.Z{
+			pipe.ZAdd(ctx, prioritySetName, rds.Z{
 				Score:  priorityScore,
 				Member: task.ID,
 			})

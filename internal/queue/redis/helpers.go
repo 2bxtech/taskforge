@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/2bxtech/taskforge/pkg/types"
-	"github.com/redis/go-redis/v9"
+	rds "github.com/redis/go-redis/v9"
 )
 
 // initializeConsumerGroups creates consumer groups for the specified queues
@@ -43,7 +43,7 @@ func (r *Queue) ensureConsumerGroup(ctx context.Context, queue string) error {
 		// Check if error is because stream doesn't exist
 		if err.Error() == "ERR The XGROUP subcommand requires the key to exist" {
 			// Create an empty stream first
-			_, err = r.client.XAdd(ctx, &redis.XAddArgs{
+			_, err = r.client.XAdd(ctx, &rds.XAddArgs{
 				Stream: streamName,
 				Values: map[string]interface{}{"_": "_"},
 			}).Result()
@@ -75,7 +75,7 @@ func (r *Queue) claimPendingMessage(ctx context.Context, queue string) (*types.T
 	streamName := r.config.GetStreamName(queue)
 
 	// Get pending messages for the consumer group
-	pending, err := r.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+	pending, err := r.client.XPendingExt(ctx, &rds.XPendingExtArgs{
 		Stream: streamName,
 		Group:  r.config.ConsumerGroup,
 		Start:  "-",
@@ -99,7 +99,7 @@ func (r *Queue) claimPendingMessage(ctx context.Context, queue string) (*types.T
 
 	// Claim the message
 	consumerName := r.config.GetConsumerName("claimer")
-	claimed, err := r.client.XClaim(ctx, &redis.XClaimArgs{
+	claimed, err := r.client.XClaim(ctx, &rds.XClaimArgs{
 		Stream:   streamName,
 		Group:    r.config.ConsumerGroup,
 		Consumer: consumerName,
@@ -126,7 +126,7 @@ func (r *Queue) readNewMessage(ctx context.Context, queue string, timeout time.D
 	consumerName := r.config.GetConsumerName("reader")
 
 	// Use XREADGROUP to read from the stream
-	streams, err := r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+	streams, err := r.client.XReadGroup(ctx, &rds.XReadGroupArgs{
 		Group:    r.config.ConsumerGroup,
 		Consumer: consumerName,
 		Streams:  []string{streamName, ">"},
@@ -135,7 +135,7 @@ func (r *Queue) readNewMessage(ctx context.Context, queue string, timeout time.D
 	}).Result()
 
 	if err != nil {
-		if err == redis.Nil {
+		if err == rds.Nil {
 			return nil, nil // No messages available
 		}
 		return nil, fmt.Errorf("failed to read from stream: %w", err)
@@ -151,7 +151,7 @@ func (r *Queue) readNewMessage(ctx context.Context, queue string, timeout time.D
 }
 
 // parseStreamEntry parses a Redis stream entry into a task
-func (r *Queue) parseStreamEntry(ctx context.Context, entry redis.XMessage) (*types.Task, error) {
+func (r *Queue) parseStreamEntry(ctx context.Context, entry rds.XMessage) (*types.Task, error) {
 	taskID, exists := entry.Values["task_id"]
 	if !exists {
 		return nil, fmt.Errorf("task_id not found in stream entry")
@@ -268,7 +268,7 @@ func (r *Queue) GetQueueStats(ctx context.Context, queue string) (*types.QueueSt
 
 		// Execute pipeline
 		_, err := pipe.Exec(ctx)
-		if err != nil && err != redis.Nil {
+		if err != nil && err != rds.Nil {
 			return fmt.Errorf("failed to get queue stats: %w", err)
 		}
 
@@ -280,7 +280,7 @@ func (r *Queue) GetQueueStats(ctx context.Context, queue string) (*types.QueueSt
 
 		// Get the priority count result
 		priorityCount, err := priorityCountCmd.Result()
-		if err != nil && err != redis.Nil {
+		if err != nil && err != rds.Nil {
 			// Log the error but don't fail the entire operation
 			r.logger.Warn("failed to get priority count",
 				types.Field{Key: "queue", Value: queue},
@@ -415,7 +415,7 @@ func (r *Queue) MoveToDLQ(ctx context.Context, taskID string, reason string) err
 		pipe := r.client.Pipeline()
 
 		// Add to DLQ stream
-		pipe.XAdd(ctx, &redis.XAddArgs{
+		pipe.XAdd(ctx, &rds.XAddArgs{
 			Stream: dlqStreamName,
 			MaxLen: r.config.DLQMaxEntries,
 			Approx: true,
@@ -540,7 +540,7 @@ func (r *Queue) GetScheduledTasks(ctx context.Context, before time.Time, limit i
 			}
 
 			retryAtStr, err := r.client.HGet(ctx, key, "next_retry_at").Result()
-			if err == redis.Nil {
+			if err == rds.Nil {
 				continue // No retry time set
 			}
 			if err != nil {
