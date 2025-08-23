@@ -228,7 +228,17 @@ func (r *Queue) scheduleRetry(ctx context.Context, task *types.Task, reason stri
 // calculateNextRetryTime calculates when to retry a task next
 func (r *Queue) calculateNextRetryTime(task *types.Task) time.Time {
 	// Exponential backoff: 1s, 2s, 4s, 8s, etc. up to max of 5 minutes
-	delay := time.Duration(1<<uint(task.CurrentRetries)) * time.Second
+	// Ensure CurrentRetries is non-negative and within reasonable bounds to prevent integer overflow
+	retries := task.CurrentRetries
+	if retries < 0 {
+		retries = 0
+	}
+	// Cap retries at 20 to prevent excessive delays and potential overflow (2^20 = ~1M seconds)
+	if retries > 20 {
+		retries = 20
+	}
+
+	delay := time.Duration(1<<uint(retries)) * time.Second
 	maxDelay := 5 * time.Minute
 
 	if delay > maxDelay {
