@@ -1,0 +1,130 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'examples/**'
+      - 'docker-compose.yml'
+      - 'tests/integration/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'examples/**'
+      - 'docker-compose.yml'
+      - 'tests/integration/**'
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.4'
+          cache: false
+
+      - name: Build binaries
+        run: |
+          mkdir -p bin
+          go build -o bin/taskforge-cli ./cmd/cli
+          go build -o bin/taskforge-worker ./cmd/worker
+          go build -o bin/redis-demo ./examples/redis_demo.go
+
+      - name: Wait for Redis to be ready
+        run: |
+          for i in {1..30}; do
+            if redis-cli -h 127.0.0.1 -p 6379 ping | grep -q PONG; then
+              echo "Redis is ready"
+              break
+            fi
+            echo "Waiting for Redis... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run Redis demo integration test
+        run: |
+          chmod +x tests/integration/redis_demo.sh
+          tests/integration/redis_demo.sh
+
+      - name: Run smoke test (when CLI is ready)
+        run: |
+          if [ -f "tests/integration/smoke.sh" ]; then
+            chmod +x tests/integration/smoke.sh
+            tests/integration/smoke.sh
+          else
+            echo "Smoke test not yet implemented - will be added in Phase 2B"
+          fi
+        continue-on-error: true
+
+  # Docker Compose integration (optional)
+  docker-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.4'
+          cache: false
+
+      - name: Build binaries
+        run: |
+          mkdir -p bin
+          go build -o bin/taskforge-api ./cmd/api
+          go build -o bin/taskforge-cli ./cmd/cli
+          go build -o bin/taskforge-worker ./cmd/worker
+
+      - name: Start Docker Compose stack
+        run: |
+          if [ -f "docker-compose.yml" ]; then
+            docker-compose up -d
+            sleep 10
+            docker-compose ps
+          else
+            echo "Docker Compose not yet configured - will be added in Phase 3"
+          fi
+        continue-on-error: true
+
+      - name: Test against Docker stack
+        run: |
+          echo "Docker integration tests will be implemented with observability stack"
+        continue-on-error: true
+
+      - name: Cleanup Docker Compose
+        if: always()
+        run: |
+          if [ -f "docker-compose.yml" ]; then
+            docker-compose down -v
+          fi

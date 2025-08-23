@@ -182,3 +182,11 @@ scratch/
 
 # Diff snapshots (redundant with git history)
 *.diff
+
+# Markdown files (temporary documentation, notes, etc.)
+*.md
+
+# Important documentation exceptions (keep these)
+!README.md
+!*/README.md
+!docs/**/*.md

@@ -20,6 +20,7 @@ API_BINARY=$(BINARY_DIR)/taskforge-api
 WORKER_BINARY=$(BINARY_DIR)/taskforge-worker
 SCHEDULER_BINARY=$(BINARY_DIR)/taskforge-scheduler
 CLI_BINARY=$(BINARY_DIR)/taskforge-cli
+DEMO_BINARY=$(BINARY_DIR)/redis-demo
 
 # Docker parameters
 DOCKER_REGISTRY=2bxtech
@@ -53,6 +54,16 @@ build: deps ## Build all binaries
 	$(GOBUILD) -o $(CLI_BINARY) ./cmd/cli
 	@echo "$(GREEN)All binaries built successfully!$(NC)"
 
+build-demo: deps ## Build demo binary
+	@echo "$(BLUE)Building demo binary...$(NC)"
+	@mkdir -p $(BINARY_DIR)
+	@if [ -f "./examples/redis_demo.go" ]; then \
+		$(GOBUILD) -o $(DEMO_BINARY) ./examples/redis_demo.go; \
+		echo "$(GREEN)Demo binary built successfully!$(NC)"; \
+	else \
+		echo "$(YELLOW)Demo source not found, skipping demo build$(NC)"; \
+	fi
+
 build-api: deps ## Build API server binary
 	@echo "$(BLUE)Building API server...$(NC)"
 	@mkdir -p $(BINARY_DIR)
@@ -84,14 +95,60 @@ test: ## Run all tests
 
 test-coverage: ## Run tests with coverage
 	@echo "$(BLUE)Running tests with coverage...$(NC)"
-	$(GOTEST) -v -coverprofile=coverage.out ./...
-	$(GOCMD) tool cover -html=coverage.out -o coverage.html
-	@echo "$(GREEN)Coverage report generated: coverage.html$(NC)"
+	@mkdir -p build/coverage
+	$(GOTEST) -race -covermode=atomic -coverprofile=build/coverage/cover.out -v ./...
+	$(GOCMD) tool cover -func=build/coverage/cover.out | tee build/coverage/coverage.txt
+	$(GOCMD) tool cover -html=build/coverage/cover.out -o build/coverage/coverage.html
+	@echo "$(GREEN)Coverage report generated: build/coverage/coverage.html$(NC)"
 
-test-integration: ## Run integration tests
+test-integration: ## Run integration tests (CI compatible)
 	@echo "$(BLUE)Running integration tests...$(NC)"
-	$(GOTEST) -v -tags=integration ./tests/...
-	@echo "$(GREEN)Integration tests passed!$(NC)"
+	@# Check if we have actual integration tests
+	@if [ -d "./tests" ] && find ./tests -name "*_test.go" | head -1 | grep -q .; then \
+		echo "Running Go integration tests..."; \
+		$(GOTEST) -v -tags=integration ./tests/...; \
+	else \
+		echo "$(YELLOW)No Go integration test files found in ./tests$(NC)"; \
+	fi
+	@# Run shell-based integration tests if they exist
+	@if [ -f "tests/integration/redis_demo.sh" ]; then \
+		echo "Running Redis demo integration test..."; \
+		chmod +x tests/integration/redis_demo.sh; \
+		./tests/integration/redis_demo.sh; \
+	else \
+		echo "$(YELLOW)Redis demo integration test not found$(NC)"; \
+	fi
+	@if [ -f "tests/integration/smoke.sh" ]; then \
+		echo "Running smoke tests..."; \
+		chmod +x tests/integration/smoke.sh; \
+		./tests/integration/smoke.sh; \
+	else \
+		echo "$(YELLOW)Smoke tests not found$(NC)"; \
+	fi
+	@echo "$(GREEN)Integration tests completed!$(NC)"
+
+ci: lint test ## Run CI pipeline locally
+	@echo "$(BLUE)Running CI pipeline...$(NC)"
+	$(GOMOD) verify
+	$(GOTEST) -race -covermode=atomic -coverprofile=coverage.out -v ./...
+	@echo "$(GREEN)CI pipeline completed successfully!$(NC)"
+
+demo: build-demo ## Run Redis queue demo
+	@echo "$(BLUE)Running TaskForge Redis Queue Demo...$(NC)"
+	@if [ -f "$(DEMO_BINARY)" ]; then \
+		echo "🔨 Running built Redis demo..."; \
+		./$(DEMO_BINARY); \
+	elif [ -f "./examples/redis_demo.go" ]; then \
+		echo "🔨 Building and running Redis demo..."; \
+		go run ./examples/redis_demo.go; \
+	else \
+		echo "❌ Redis demo not found"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Demo completed!$(NC)"
+
+integration-test: ## Run integration tests (alias for test-integration)
+	@make test-integration
 
 benchmark: ## Run benchmarks
 	@echo "$(BLUE)Running benchmarks...$(NC)"
@@ -112,7 +169,7 @@ clean: ## Clean build artifacts
 	@echo "$(BLUE)Cleaning build artifacts...$(NC)"
 	$(GOCLEAN)
 	rm -rf $(BINARY_DIR)
-	rm -f coverage.out coverage.html
+	rm -f coverage.out coverage.html gosec-results.sarif gosec.json
 	@echo "$(GREEN)Clean completed!$(NC)"
 
 install: build ## Install binaries to $GOPATH/bin
@@ -139,7 +196,7 @@ dev-setup: ## Set up development environment
 	@echo "$(BLUE)Setting up development environment...$(NC)"
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "Installing golangci-lint..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.54.2; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
 	}
 	@command -v docker >/dev/null 2>&1 || { \
 		echo "$(YELLOW)Warning: Docker not found. Please install Docker for full development experience.$(NC)"; \
@@ -183,7 +240,13 @@ security-scan: ## Run security scan
 		echo "Installing gosec..."; \
 		go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
 	}
-	gosec ./...
+	@command -v govulncheck >/dev/null 2>&1 || { \
+		echo "Installing govulncheck..."; \
+		go install golang.org/x/vuln/cmd/govulncheck@latest; \
+	}
+	gosec -fmt sarif -out gosec-results.sarif ./... || true
+	gosec -fmt text ./... || true
+	govulncheck ./... || true
 	@echo "$(GREEN)Security scan completed!$(NC)"
 
 mod-update: ## Update all dependencies

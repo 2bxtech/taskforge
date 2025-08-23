@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math"
 	"time"
-	
+
 	"github.com/google/uuid"
 )
 
@@ -55,7 +55,7 @@ func GenerateDedupeKey(taskType TaskType, payload []byte) string {
 // CalculateNextRetry calculates the next retry time based on backoff strategy
 func CalculateNextRetry(currentRetry int, strategy string, initialDelay, maxDelay time.Duration, factor float64) time.Time {
 	var delay time.Duration
-	
+
 	switch strategy {
 	case "exponential":
 		// Proper exponential backoff: initialDelay * factor^currentRetry
@@ -67,11 +67,11 @@ func CalculateNextRetry(currentRetry int, strategy string, initialDelay, maxDela
 	default:
 		delay = initialDelay
 	}
-	
+
 	if delay > maxDelay {
 		delay = maxDelay
 	}
-	
+
 	return time.Now().Add(delay)
 }
 
@@ -98,8 +98,8 @@ func IsValidTaskType(taskType TaskType) bool {
 // IsValidTaskStatus checks if a task status is valid
 func IsValidTaskStatus(status TaskStatus) bool {
 	switch status {
-	case TaskStatusPending, TaskStatusRunning, TaskStatusCompleted, 
-		 TaskStatusFailed, TaskStatusDeadLetter, TaskStatusCancelled:
+	case TaskStatusPending, TaskStatusRunning, TaskStatusCompleted,
+		TaskStatusFailed, TaskStatusDeadLetter, TaskStatusCancelled:
 		return true
 	default:
 		return false
@@ -186,7 +186,7 @@ func (b *TaskBuilder) WithPayload(payload interface{}) *TaskBuilder {
 	if b.err != nil {
 		return b
 	}
-	
+
 	// Serialize the payload to JSON
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -286,17 +286,17 @@ func (b *TaskBuilder) Build() (*Task, error) {
 	if b.err != nil {
 		return nil, b.err
 	}
-	
+
 	// Set defaults if not provided
 	if b.task.MaxRetries == 0 {
 		b.task.MaxRetries = DefaultMaxRetries
 	}
-	
+
 	// Generate correlation ID if not provided
 	if b.task.CorrelationID == "" {
 		b.task.CorrelationID = GenerateCorrelationID()
 	}
-	
+
 	return b.task, nil
 }
 
@@ -313,7 +313,7 @@ func (b *TaskBuilder) MustBuild() *Task {
 // Clone creates a deep copy of a task
 func (t *Task) Clone() *Task {
 	clone := *t
-	
+
 	// Deep copy slices and maps
 	if t.Metadata != nil {
 		clone.Metadata = make(map[string]interface{})
@@ -321,44 +321,44 @@ func (t *Task) Clone() *Task {
 			clone.Metadata[k] = v
 		}
 	}
-	
+
 	// Copy payload
 	if t.Payload != nil {
 		clone.Payload = make([]byte, len(t.Payload))
 		copy(clone.Payload, t.Payload)
 	}
-	
+
 	// Copy time pointers
 	if t.ScheduledAt != nil {
 		scheduledAt := *t.ScheduledAt
 		clone.ScheduledAt = &scheduledAt
 	}
-	
+
 	if t.StartedAt != nil {
 		startedAt := *t.StartedAt
 		clone.StartedAt = &startedAt
 	}
-	
+
 	if t.CompletedAt != nil {
 		completedAt := *t.CompletedAt
 		clone.CompletedAt = &completedAt
 	}
-	
+
 	if t.NextRetryAt != nil {
 		nextRetryAt := *t.NextRetryAt
 		clone.NextRetryAt = &nextRetryAt
 	}
-	
+
 	if t.DeadlineAt != nil {
 		deadlineAt := *t.DeadlineAt
 		clone.DeadlineAt = &deadlineAt
 	}
-	
+
 	if t.Timeout != nil {
 		timeout := *t.Timeout
 		clone.Timeout = &timeout
 	}
-	
+
 	return &clone
 }
 
