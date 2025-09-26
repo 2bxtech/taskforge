@@ -255,15 +255,6 @@ func (r *Queue) calculateNextRetryTime(task *types.Task) time.Time {
 	return time.Now().Add(delay + jitter)
 }
 
-// min returns the minimum of two integers
-// (Can be removed if using Go 1.21+ which has built-in min function)
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // timePtr returns a pointer to the given time
 func timePtr(t time.Time) *time.Time {
 	return &t
