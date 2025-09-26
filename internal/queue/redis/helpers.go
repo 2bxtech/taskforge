@@ -317,7 +317,7 @@ func (r *Queue) GetQueueStats(ctx context.Context, queue string) (*types.QueueSt
 			PendingTasks: pendingTasks,
 			RunningTasks: 0, // Would need additional tracking
 			TasksByPriority: map[types.Priority]int64{
-				// This is simplified - in production you'd want to
+				// This is simplified - in larger systems you'd want to
 				// track tasks by actual priority levels
 				types.PriorityNormal: priorityCount,
 			},
@@ -518,7 +518,7 @@ func (r *Queue) ScheduleRetry(ctx context.Context, taskID string, retryAt time.T
 
 	return r.connMgr.WithRetry(ctx, func() error {
 		// For now, we'll implement a simple approach
-		// In a production system, you might use a separate scheduled tasks system
+		// In a larger system, you might use a separate scheduled tasks system
 
 		// Update the task's retry time
 		taskHashKey := r.config.GetTaskHashKey(taskID)

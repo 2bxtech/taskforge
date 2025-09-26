@@ -16,7 +16,7 @@ A distributed task queue system built with Go, demonstrating enterprise-grade pa
 - Configuration system and development tooling
 
 **Phase 2A Complete**: Redis Queue Backend ✅
-- Production-ready Redis Streams implementation with consumer groups
+- Redis Streams implementation with consumer groups
 - Factory and Strategy patterns for pluggable queue backends
 - Priority queue system with FIFO ordering within priority levels
 - Comprehensive error handling with exponential backoff retry
@@ -43,7 +43,7 @@ make demo
 
 ## 🎯 Goals
 
-Building a production-quality distributed task queue to explore:
+Building a distributed task queue to explore:
 - Go concurrency patterns
 - Redis Streams for queuing
 - Circuit breaker implementations  
