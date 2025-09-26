@@ -364,7 +364,7 @@ config := &redis.Config{
 }
 ```
 
-### Production Configuration
+### Configuration
 
 ```go
 config := &redis.Config{

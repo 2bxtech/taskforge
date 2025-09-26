@@ -48,7 +48,7 @@ func GenerateCorrelationID() string {
 
 // GenerateDedupeKey generates a deduplication key based on task content
 func GenerateDedupeKey(taskType TaskType, payload []byte) string {
-	// Simple implementation - in production, you might want to use a hash
+	// Simple implementation - in larger deployments, you might want to use a hash
 	return fmt.Sprintf("%s_%x", taskType, payload)
 }
 

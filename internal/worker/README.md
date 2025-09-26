@@ -391,7 +391,7 @@ taskforge_circuit_breaker_state{service}
 taskforge_queue_depth{queue}
 ```
 
-## Production Deployment
+## Deployment
 
 ### Recommended Settings
 ```go
@@ -493,4 +493,4 @@ curl http://localhost:8080/api/v1/circuit-breakers
 
 ---
 
-This worker engine provides a production-ready, enterprise-grade foundation for distributed task processing with comprehensive fault tolerance, resource management, and observability features.
+This worker engine provides a foundation for distributed task processing with fault tolerance, resource management, and observability features.

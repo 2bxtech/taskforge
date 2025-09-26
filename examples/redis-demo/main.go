@@ -290,5 +290,5 @@ func main() {
 	fmt.Println("   ✅ Comprehensive error handling")
 	fmt.Println("   ✅ Redis Streams for reliable delivery")
 	fmt.Println("   ✅ Consumer group management")
-	fmt.Println("   ✅ Production-ready patterns")
+	fmt.Println("   ✅ Fault tolerance patterns")
 }
