@@ -10,10 +10,10 @@ import (
 )
 
 // WorkerContextKey is a custom type for context keys to avoid collisions
-type WorkerContextKey string
+type ContextKey string
 
 const (
-	WorkerIDKey WorkerContextKey = "worker_id"
+	WorkerIDKey ContextKey = "worker_id"
 )
 
 // Worker implements the types.Worker interface with enhanced functionality
@@ -23,7 +23,7 @@ type Worker struct {
 	config          *types.WorkerConfig
 	queueBackend    types.QueueBackend
 	commandRegistry *TaskCommandRegistry
-	eventBus        *WorkerEventBus
+	eventBus        *EventBus
 	logger          types.Logger
 
 	// State management
@@ -59,7 +59,7 @@ func NewWorker(
 	config *types.WorkerConfig,
 	queueBackend types.QueueBackend,
 	commandRegistry *TaskCommandRegistry,
-	eventBus *WorkerEventBus,
+	eventBus *EventBus,
 	logger types.Logger,
 ) *Worker {
 	return &Worker{
@@ -220,8 +220,8 @@ func (w *Worker) Heartbeat(ctx context.Context) error {
 	w.lastHeartbeat = time.Now()
 
 	// Send heartbeat event
-	w.eventBus.NotifyObservers(ctx, WorkerEventHealthy, &WorkerEventData{
-		Event:          WorkerEventHealthy,
+	w.eventBus.NotifyObservers(ctx, EventHealthy, &EventData{
+		Event:          EventHealthy,
 		WorkerID:       w.id,
 		Timestamp:      w.lastHeartbeat,
 		ActiveTasks:    len(w.processingTasks),
@@ -281,7 +281,7 @@ func (w *Worker) processNextTask(ctx context.Context, queue string) error {
 	}
 
 	// Notify observers of task received
-	w.eventBus.NotifyObservers(ctx, TaskEventReceived, &WorkerEventData{
+	w.eventBus.NotifyObservers(ctx, TaskEventReceived, &EventData{
 		Event:     TaskEventReceived,
 		WorkerID:  w.id,
 		TaskID:    task.ID,
@@ -328,7 +328,7 @@ func (w *Worker) executeTask(ctx context.Context, task *types.Task) *types.TaskR
 	}
 
 	// Notify observers of task start
-	w.eventBus.NotifyObservers(ctx, TaskEventStarted, &WorkerEventData{
+	w.eventBus.NotifyObservers(ctx, TaskEventStarted, &EventData{
 		Event:     TaskEventStarted,
 		WorkerID:  w.id,
 		TaskID:    task.ID,
@@ -342,7 +342,7 @@ func (w *Worker) executeTask(ctx context.Context, task *types.Task) *types.TaskR
 	if err != nil {
 		duration := time.Since(startTime)
 
-		w.eventBus.NotifyObservers(ctx, TaskEventFailed, &WorkerEventData{
+		w.eventBus.NotifyObservers(ctx, TaskEventFailed, &EventData{
 			Event:     TaskEventFailed,
 			WorkerID:  w.id,
 			TaskID:    task.ID,
@@ -386,7 +386,7 @@ func (w *Worker) executeTask(ctx context.Context, task *types.Task) *types.TaskR
 			result.Error = err.Error()
 		}
 
-		w.eventBus.NotifyObservers(ctx, TaskEventFailed, &WorkerEventData{
+		w.eventBus.NotifyObservers(ctx, TaskEventFailed, &EventData{
 			Event:     TaskEventFailed,
 			WorkerID:  w.id,
 			TaskID:    task.ID,
@@ -406,7 +406,7 @@ func (w *Worker) executeTask(ctx context.Context, task *types.Task) *types.TaskR
 	} else {
 		result.Status = types.TaskStatusCompleted
 
-		w.eventBus.NotifyObservers(ctx, TaskEventCompleted, &WorkerEventData{
+		w.eventBus.NotifyObservers(ctx, TaskEventCompleted, &EventData{
 			Event:     TaskEventCompleted,
 			WorkerID:  w.id,
 			TaskID:    task.ID,
@@ -482,7 +482,7 @@ func (w *Worker) handleFailedTask(ctx context.Context, task *types.Task, result 
 	}
 
 	// Notify observers of retry
-	w.eventBus.NotifyObservers(ctx, TaskEventRetrying, &WorkerEventData{
+	w.eventBus.NotifyObservers(ctx, TaskEventRetrying, &EventData{
 		Event:     TaskEventRetrying,
 		WorkerID:  w.id,
 		TaskID:    task.ID,

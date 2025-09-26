@@ -20,31 +20,31 @@ func NewTestLogger() *TestLogger {
 	return &TestLogger{messages: make([]string, 0)}
 }
 
-func (l *TestLogger) Debug(msg string, fields ...types.Field) {
+func (l *TestLogger) Debug(msg string, _ ...types.Field) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	l.messages = append(l.messages, "[DEBUG] "+msg)
 }
 
-func (l *TestLogger) Info(msg string, fields ...types.Field) {
+func (l *TestLogger) Info(msg string, _ ...types.Field) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	l.messages = append(l.messages, "[INFO] "+msg)
 }
 
-func (l *TestLogger) Warn(msg string, fields ...types.Field) {
+func (l *TestLogger) Warn(msg string, _ ...types.Field) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	l.messages = append(l.messages, "[WARN] "+msg)
 }
 
-func (l *TestLogger) Error(msg string, fields ...types.Field) {
+func (l *TestLogger) Error(msg string, _ ...types.Field) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	l.messages = append(l.messages, "[ERROR] "+msg)
 }
 
-func (l *TestLogger) With(fields ...types.Field) types.Logger {
+func (l *TestLogger) With(_ ...types.Field) types.Logger {
 	return l
 }
 
@@ -56,11 +56,11 @@ func (l *TestLogger) GetMessages() []string {
 	return messages
 }
 
-// TestObserver implements WorkerObserver for testing
+// TestObserver implements Observer for testing
 type TestObserver struct {
 	id     string
 	active bool
-	events []WorkerEventData
+	events []EventData
 	mutex  sync.Mutex
 }
 
@@ -68,11 +68,11 @@ func NewTestObserver(id string) *TestObserver {
 	return &TestObserver{
 		id:     id,
 		active: true,
-		events: make([]WorkerEventData, 0),
+		events: make([]EventData, 0),
 	}
 }
 
-func (o *TestObserver) OnWorkerEvent(ctx context.Context, data *WorkerEventData) {
+func (o *TestObserver) OnWorkerEvent(_ context.Context, data *EventData) {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 	o.events = append(o.events, *data)
@@ -94,10 +94,10 @@ func (o *TestObserver) SetActive(active bool) {
 	o.active = active
 }
 
-func (o *TestObserver) GetEvents() []WorkerEventData {
+func (o *TestObserver) GetEvents() []EventData {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
-	events := make([]WorkerEventData, len(o.events))
+	events := make([]EventData, len(o.events))
 	copy(events, o.events)
 	return events
 }
@@ -113,7 +113,7 @@ func NewTestTaskProcessor(taskType types.TaskType) *TestTaskProcessor {
 	return &TestTaskProcessor{
 		taskType:     taskType,
 		capabilities: []string{"test"},
-		processFn: func(ctx context.Context, task *types.Task) (*types.TaskResult, error) {
+		processFn: func(_ context.Context, task *types.Task) (*types.TaskResult, error) {
 			return &types.TaskResult{
 				TaskID: task.ID,
 				Status: types.TaskStatusCompleted,
@@ -138,10 +138,10 @@ func (p *TestTaskProcessor) SetProcessFn(fn func(ctx context.Context, task *type
 	p.processFn = fn
 }
 
-// Test WorkerEventBus
+// Test EventBus
 func TestWorkerEventBus(t *testing.T) {
 	logger := NewTestLogger()
-	bus := NewWorkerEventBus(logger, 100)
+	bus := NewEventBus(logger, 100)
 	defer bus.Close()
 
 	// Test observer registration
@@ -157,13 +157,13 @@ func TestWorkerEventBus(t *testing.T) {
 
 	// Test event notification
 	ctx := context.Background()
-	eventData := &WorkerEventData{
-		Event:     WorkerEventStarted,
+	eventData := &EventData{
+		Event:     EventStarted,
 		WorkerID:  "test-worker",
 		Timestamp: time.Now(),
 	}
 
-	bus.NotifyObservers(ctx, WorkerEventStarted, eventData)
+	bus.NotifyObservers(ctx, EventStarted, eventData)
 
 	// Give some time for async processing
 	time.Sleep(100 * time.Millisecond)
@@ -182,11 +182,11 @@ func TestWorkerEventBus(t *testing.T) {
 
 	// Test observer filter
 	observer3 := NewTestObserver("observer3")
-	bus.RegisterObserverWithFilter(observer3, []WorkerEvent{TaskEventCompleted})
+	bus.RegisterObserverWithFilter(observer3, []Event{TaskEventCompleted})
 
 	// Send different events
-	bus.NotifyObservers(ctx, WorkerEventStarted, &WorkerEventData{Event: WorkerEventStarted, WorkerID: "test"})
-	bus.NotifyObservers(ctx, TaskEventCompleted, &WorkerEventData{Event: TaskEventCompleted, WorkerID: "test"})
+	bus.NotifyObservers(ctx, EventStarted, &EventData{Event: EventStarted, WorkerID: "test"})
+	bus.NotifyObservers(ctx, TaskEventCompleted, &EventData{Event: TaskEventCompleted, WorkerID: "test"})
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -482,7 +482,7 @@ func TestHealthMonitorObserver(t *testing.T) {
 	workerID := "test-worker"
 
 	// Simulate successful task completion
-	observer.OnWorkerEvent(ctx, &WorkerEventData{
+	observer.OnWorkerEvent(ctx, &EventData{
 		Event:     TaskEventCompleted,
 		WorkerID:  workerID,
 		Timestamp: time.Now(),
@@ -500,7 +500,7 @@ func TestHealthMonitorObserver(t *testing.T) {
 
 	// Simulate failures
 	for i := 0; i < 3; i++ {
-		observer.OnWorkerEvent(ctx, &WorkerEventData{
+		observer.OnWorkerEvent(ctx, &EventData{
 			Event:     TaskEventFailed,
 			WorkerID:  workerID,
 			Timestamp: time.Now(),
@@ -521,14 +521,14 @@ func TestHealthMonitorObserver(t *testing.T) {
 // Benchmark tests
 func BenchmarkEventBusNotification(b *testing.B) {
 	logger := NewTestLogger()
-	bus := NewWorkerEventBus(logger, 10000)
+	bus := NewEventBus(logger, 10000)
 	defer bus.Close()
 
 	observer := NewTestObserver("bench-observer")
 	bus.RegisterObserver(observer)
 
 	ctx := context.Background()
-	eventData := &WorkerEventData{
+	eventData := &EventData{
 		Event:     TaskEventCompleted,
 		WorkerID:  "bench-worker",
 		Timestamp: time.Now(),

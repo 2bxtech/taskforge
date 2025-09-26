@@ -8,7 +8,7 @@ import (
 	"github.com/2bxtech/taskforge/pkg/types"
 )
 
-// MetricsObserver implements WorkerObserver to collect metrics from worker events
+// MetricsObserver implements Observer to collect metrics from worker events
 // It integrates with the MetricsCollector interface from types
 type MetricsObserver struct {
 	id        string
@@ -59,7 +59,7 @@ func (m *MetricsObserver) SetActive(active bool) {
 }
 
 // OnWorkerEvent processes worker events and collects relevant metrics
-func (m *MetricsObserver) OnWorkerEvent(ctx context.Context, data *WorkerEventData) {
+func (m *MetricsObserver) OnWorkerEvent(_ context.Context, data *EventData) {
 	if !m.IsActive() {
 		return
 	}
@@ -70,7 +70,7 @@ func (m *MetricsObserver) OnWorkerEvent(ctx context.Context, data *WorkerEventDa
 	m.mutex.Unlock()
 
 	switch data.Event {
-	case WorkerEventRegistered:
+	case EventRegistered:
 		m.collector.RecordWorkerRegistered(data.WorkerID, []string{data.Queue})
 
 	case TaskEventReceived:
@@ -111,9 +111,9 @@ func (m *MetricsObserver) OnWorkerEvent(ctx context.Context, data *WorkerEventDa
 			m.collector.UpdateQueueDepth(data.Queue, data.QueueDepth)
 		}
 
-	case WorkerEventHealthy, WorkerEventUnhealthy:
+	case EventHealthy, EventUnhealthy:
 		status := types.WorkerStatusIdle
-		if data.Event == WorkerEventUnhealthy {
+		if data.Event == EventUnhealthy {
 			status = types.WorkerStatusOffline
 		}
 		m.collector.UpdateWorkerStatus(data.WorkerID, status)
@@ -157,7 +157,7 @@ func (m *MetricsObserver) calculateTaskDuration(taskID string, endTime time.Time
 }
 
 // extractPriority extracts priority from event metadata, defaulting to normal
-func (m *MetricsObserver) extractPriority(data *WorkerEventData) types.Priority {
+func (m *MetricsObserver) extractPriority(data *EventData) types.Priority {
 	if data.Metadata != nil {
 		if priority, ok := data.Metadata["priority"].(string); ok {
 			return types.Priority(priority)
@@ -189,7 +189,7 @@ func (m *MetricsObserver) extractErrorType(err error) string {
 }
 
 // extractServiceName extracts service name from event metadata
-func (m *MetricsObserver) extractServiceName(data *WorkerEventData) string {
+func (m *MetricsObserver) extractServiceName(data *EventData) string {
 	if data.Metadata != nil {
 		if service, ok := data.Metadata["service"].(string); ok {
 			return service
@@ -221,17 +221,17 @@ type HealthMonitorObserver struct {
 	mutex  sync.RWMutex
 
 	// Health tracking
-	workerHealth     map[string]*WorkerHealthState
+	workerHealth     map[string]*HealthState
 	healthThresholds HealthThresholds
 
 	// Alert callbacks
-	onUnhealthyWorker func(workerID string, state *WorkerHealthState)
-	onWorkerRecovered func(workerID string, state *WorkerHealthState)
+	onUnhealthyWorker func(workerID string, state *HealthState)
+	onWorkerRecovered func(workerID string, state *HealthState)
 	onHighFailureRate func(workerID string, failureRate float64)
 }
 
 // WorkerHealthState tracks the health state of a worker
-type WorkerHealthState struct {
+type HealthState struct {
 	WorkerID            string
 	LastSeen            time.Time
 	Status              types.WorkerStatus
@@ -278,7 +278,7 @@ func NewHealthMonitorObserver(id string, logger types.Logger, thresholds HealthT
 		id:               id,
 		logger:           logger,
 		active:           true,
-		workerHealth:     make(map[string]*WorkerHealthState),
+		workerHealth:     make(map[string]*HealthState),
 		healthThresholds: thresholds,
 	}
 }
@@ -304,8 +304,8 @@ func (h *HealthMonitorObserver) SetActive(active bool) {
 
 // SetCallbacks sets callback functions for health events
 func (h *HealthMonitorObserver) SetCallbacks(
-	onUnhealthy func(string, *WorkerHealthState),
-	onRecovered func(string, *WorkerHealthState),
+	onUnhealthy func(string, *HealthState),
+	onRecovered func(string, *HealthState),
 	onHighFailure func(string, float64),
 ) {
 	h.mutex.Lock()
@@ -317,7 +317,7 @@ func (h *HealthMonitorObserver) SetCallbacks(
 }
 
 // OnWorkerEvent processes worker events to monitor health
-func (h *HealthMonitorObserver) OnWorkerEvent(ctx context.Context, data *WorkerEventData) {
+func (h *HealthMonitorObserver) OnWorkerEvent(_ context.Context, data *EventData) {
 	if !h.IsActive() {
 		return
 	}
@@ -328,7 +328,7 @@ func (h *HealthMonitorObserver) OnWorkerEvent(ctx context.Context, data *WorkerE
 	// Get or create worker health state
 	state, exists := h.workerHealth[data.WorkerID]
 	if !exists {
-		state = &WorkerHealthState{
+		state = &HealthState{
 			WorkerID:    data.WorkerID,
 			IsHealthy:   true,
 			LastSeen:    data.Timestamp,
@@ -387,7 +387,7 @@ func (h *HealthMonitorObserver) OnWorkerEvent(ctx context.Context, data *WorkerE
 }
 
 // updateWorkerHealthState updates state based on the event
-func (h *HealthMonitorObserver) updateWorkerHealthState(state *WorkerHealthState, data *WorkerEventData) {
+func (h *HealthMonitorObserver) updateWorkerHealthState(state *HealthState, data *EventData) {
 	switch data.Event {
 	case TaskEventStarted:
 		state.ActiveTasks++
@@ -418,13 +418,13 @@ func (h *HealthMonitorObserver) updateWorkerHealthState(state *WorkerHealthState
 			h.updateAverageTaskDuration(state, data.Duration)
 		}
 
-	case WorkerEventHealthy:
+	case EventHealthy:
 		state.Status = types.WorkerStatusIdle
 
-	case WorkerEventUnhealthy:
+	case EventUnhealthy:
 		state.Status = types.WorkerStatusOffline
 
-	case WorkerEventDraining:
+	case EventDraining:
 		state.Status = types.WorkerStatusDraining
 	}
 
@@ -441,7 +441,7 @@ func (h *HealthMonitorObserver) updateWorkerHealthState(state *WorkerHealthState
 }
 
 // updateAverageTaskDuration updates the rolling average task duration
-func (h *HealthMonitorObserver) updateAverageTaskDuration(state *WorkerHealthState, duration time.Duration) {
+func (h *HealthMonitorObserver) updateAverageTaskDuration(state *HealthState, duration time.Duration) {
 	// Simple exponential moving average
 	alpha := 0.1 // Smoothing factor
 	if state.AvgTaskDuration == 0 {
@@ -452,7 +452,7 @@ func (h *HealthMonitorObserver) updateAverageTaskDuration(state *WorkerHealthSta
 }
 
 // calculateHealthScore calculates a health score from 0.0 to 1.0
-func (h *HealthMonitorObserver) calculateHealthScore(state *WorkerHealthState) float64 {
+func (h *HealthMonitorObserver) calculateHealthScore(state *HealthState) float64 {
 	score := 1.0
 
 	// Penalty for consecutive failures
@@ -506,7 +506,7 @@ func (h *HealthMonitorObserver) calculateHealthScore(state *WorkerHealthState) f
 }
 
 // GetWorkerHealth returns the health state for a specific worker
-func (h *HealthMonitorObserver) GetWorkerHealth(workerID string) *WorkerHealthState {
+func (h *HealthMonitorObserver) GetWorkerHealth(workerID string) *HealthState {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
@@ -521,11 +521,11 @@ func (h *HealthMonitorObserver) GetWorkerHealth(workerID string) *WorkerHealthSt
 }
 
 // GetAllWorkerHealth returns health states for all tracked workers
-func (h *HealthMonitorObserver) GetAllWorkerHealth() map[string]*WorkerHealthState {
+func (h *HealthMonitorObserver) GetAllWorkerHealth() map[string]*HealthState {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
-	result := make(map[string]*WorkerHealthState)
+	result := make(map[string]*HealthState)
 	for workerID, state := range h.workerHealth {
 		stateCopy := *state
 		result[workerID] = &stateCopy

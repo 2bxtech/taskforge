@@ -53,7 +53,7 @@ func NewResourcePool(id string, config ResourcePoolConfig, logger types.Logger) 
 }
 
 // AcquireResources attempts to acquire resources for task execution
-func (p *ResourcePool) AcquireResources(ctx context.Context, requirements ResourceRequirements) (ResourceToken, error) {
+func (p *ResourcePool) AcquireResources(_ context.Context, requirements ResourceRequirements) (ResourceToken, error) {
 	startTime := time.Now()
 
 	p.mutex.Lock()
