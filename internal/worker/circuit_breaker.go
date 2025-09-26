@@ -322,7 +322,7 @@ func (rl *RateLimiterImpl) Allow(ctx context.Context, key string) (bool, error) 
 }
 
 // AllowN checks if N operations are allowed
-func (rl *RateLimiterImpl) AllowN(ctx context.Context, key string, n int) (bool, error) {
+func (rl *RateLimiterImpl) AllowN(_ context.Context, _ string, n int) (bool, error) {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
@@ -358,7 +358,7 @@ func (rl *RateLimiterImpl) AllowN(ctx context.Context, key string, n int) (bool,
 }
 
 // Reset resets the rate limiter for a specific key
-func (rl *RateLimiterImpl) Reset(ctx context.Context, key string) error {
+func (rl *RateLimiterImpl) Reset(_ context.Context, key string) error {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 

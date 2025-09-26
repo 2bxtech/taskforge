@@ -12,21 +12,21 @@ import (
 
 // WorkerPool implements the main worker pool with lifecycle management
 // It orchestrates workers, observes their behavior, and manages graceful shutdown
-type WorkerPool struct {
+type Pool struct {
 	id              string
 	config          *types.WorkerConfig
 	queueBackend    types.QueueBackend
 	commandRegistry *TaskCommandRegistry
 	bulkheadManager *BulkheadManager
-	eventBus        *WorkerEventBus
+	eventBus        *EventBus
 	logger          types.Logger
 
 	// Worker management
-	workers      map[string]*WorkerInstance
+	workers      map[string]*Instance
 	workersMutex sync.RWMutex
 
 	// Lifecycle management
-	state            WorkerPoolState
+	state            PoolState
 	stateMutex       sync.RWMutex
 	shutdownCh       chan struct{}
 	shutdownComplete chan struct{}
@@ -41,19 +41,19 @@ type WorkerPool struct {
 	healthObserver  *HealthMonitorObserver
 }
 
-// WorkerPoolState represents the current state of the worker pool
-type WorkerPoolState string
+// PoolState represents the current state of the worker pool
+type PoolState string
 
 const (
-	WorkerPoolStateIdle     WorkerPoolState = "idle"     // Not started
-	WorkerPoolStateStarting WorkerPoolState = "starting" // Starting up
-	WorkerPoolStateRunning  WorkerPoolState = "running"  // Processing tasks
-	WorkerPoolStateDraining WorkerPoolState = "draining" // Gracefully shutting down
-	WorkerPoolStateStopped  WorkerPoolState = "stopped"  // Fully stopped
+	PoolStateIdle     PoolState = "idle"     // Not started
+	PoolStateStarting PoolState = "starting" // Starting up
+	PoolStateRunning  PoolState = "running"  // Processing tasks
+	PoolStateDraining PoolState = "draining" // Gracefully shutting down
+	PoolStateStopped  PoolState = "stopped"  // Fully stopped
 )
 
-// WorkerInstance represents a single worker in the pool
-type WorkerInstance struct {
+// Instance represents a single worker in the pool
+type Instance struct {
 	id            string
 	worker        types.Worker
 	queues        []string
@@ -71,7 +71,7 @@ func NewWorkerPool(
 	queueBackend types.QueueBackend,
 	metricsCollector types.MetricsCollector,
 	logger types.Logger,
-) (*WorkerPool, error) {
+) (*Pool, error) {
 	// Create command registry
 	registry := NewTaskCommandRegistry(logger)
 
@@ -80,7 +80,7 @@ func NewWorkerPool(
 	bulkheadManager := NewBulkheadManager(bulkheadConfig, logger)
 
 	// Create event bus
-	eventBus := NewWorkerEventBus(logger, 1000)
+	eventBus := NewEventBus(logger, 1000)
 
 	// Create observers
 	metricsObserver := NewMetricsObserver(id+"-metrics", metricsCollector, logger)
@@ -90,7 +90,7 @@ func NewWorkerPool(
 	eventBus.RegisterObserver(metricsObserver)
 	eventBus.RegisterObserver(healthObserver)
 
-	pool := &WorkerPool{
+	pool := &Pool{
 		id:               id,
 		config:           config,
 		queueBackend:     queueBackend,
@@ -98,8 +98,8 @@ func NewWorkerPool(
 		bulkheadManager:  bulkheadManager,
 		eventBus:         eventBus,
 		logger:           logger,
-		workers:          make(map[string]*WorkerInstance),
-		state:            WorkerPoolStateIdle,
+		workers:          make(map[string]*Instance),
+		state:            PoolStateIdle,
 		shutdownCh:       make(chan struct{}),
 		shutdownComplete: make(chan struct{}),
 		metricsObserver:  metricsObserver,
@@ -117,7 +117,7 @@ func NewWorkerPool(
 }
 
 // RegisterTaskProcessor registers a task processor with the worker pool
-func (wp *WorkerPool) RegisterTaskProcessor(taskType types.TaskType, processor types.TaskProcessor) error {
+func (wp *Pool) RegisterTaskProcessor(taskType types.TaskType, processor types.TaskProcessor) error {
 	// Create resource requirements based on task type
 	requirements := wp.getResourceRequirementsForTaskType(taskType)
 
@@ -144,13 +144,13 @@ func (wp *WorkerPool) RegisterTaskProcessor(taskType types.TaskType, processor t
 }
 
 // Start starts the worker pool
-func (wp *WorkerPool) Start(ctx context.Context) error {
+func (wp *Pool) Start(ctx context.Context) error {
 	wp.stateMutex.Lock()
-	if wp.state != WorkerPoolStateIdle {
+	if wp.state != PoolStateIdle {
 		wp.stateMutex.Unlock()
 		return fmt.Errorf("worker pool is already started or shutting down")
 	}
-	wp.state = WorkerPoolStateStarting
+	wp.state = PoolStateStarting
 	wp.startTime = time.Now()
 	wp.stateMutex.Unlock()
 
@@ -160,8 +160,8 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 		types.Field{Key: "queues", Value: wp.config.Queues})
 
 	// Notify observers
-	wp.eventBus.NotifyObservers(ctx, WorkerEventStarted, &WorkerEventData{
-		Event:     WorkerEventStarted,
+	wp.eventBus.NotifyObservers(ctx, EventStarted, &EventData{
+		Event:     EventStarted,
 		WorkerID:  wp.id,
 		Timestamp: time.Now(),
 	})
@@ -185,7 +185,7 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	go wp.taskCoordinatorLoop(ctx)
 
 	wp.stateMutex.Lock()
-	wp.state = WorkerPoolStateRunning
+	wp.state = PoolStateRunning
 	wp.stateMutex.Unlock()
 
 	wp.logger.Info("worker pool started successfully",
@@ -196,14 +196,14 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 }
 
 // Stop gracefully stops the worker pool
-func (wp *WorkerPool) Stop(ctx context.Context) error {
+func (wp *Pool) Stop(ctx context.Context) error {
 	wp.stateMutex.Lock()
-	if wp.state == WorkerPoolStateStopped || wp.state == WorkerPoolStateDraining {
+	if wp.state == PoolStateStopped || wp.state == PoolStateDraining {
 		wp.stateMutex.Unlock()
 		return nil
 	}
 
-	wp.state = WorkerPoolStateDraining
+	wp.state = PoolStateDraining
 	wp.stateMutex.Unlock()
 
 	wp.logger.Info("stopping worker pool gracefully",
@@ -211,8 +211,8 @@ func (wp *WorkerPool) Stop(ctx context.Context) error {
 		types.Field{Key: "shutdown_timeout", Value: wp.config.ShutdownTimeout})
 
 	// Notify observers of draining state
-	wp.eventBus.NotifyObservers(ctx, WorkerEventDraining, &WorkerEventData{
-		Event:     WorkerEventDraining,
+	wp.eventBus.NotifyObservers(ctx, EventDraining, &EventData{
+		Event:     EventDraining,
 		WorkerID:  wp.id,
 		Timestamp: time.Now(),
 	})
@@ -237,12 +237,12 @@ func (wp *WorkerPool) Stop(ctx context.Context) error {
 	wp.cleanup()
 
 	wp.stateMutex.Lock()
-	wp.state = WorkerPoolStateStopped
+	wp.state = PoolStateStopped
 	wp.stateMutex.Unlock()
 
 	// Final notification
-	wp.eventBus.NotifyObservers(context.Background(), WorkerEventStopped, &WorkerEventData{
-		Event:     WorkerEventStopped,
+	wp.eventBus.NotifyObservers(context.Background(), EventStopped, &EventData{
+		Event:     EventStopped,
 		WorkerID:  wp.id,
 		Timestamp: time.Now(),
 	})
@@ -251,14 +251,14 @@ func (wp *WorkerPool) Stop(ctx context.Context) error {
 }
 
 // startWorker creates and starts a new worker instance
-func (wp *WorkerPool) startWorker(ctx context.Context, workerID string, queues []string) error {
+func (wp *Pool) startWorker(ctx context.Context, workerID string, queues []string) error {
 	// Create worker instance
 	worker := NewWorker(workerID, wp.config, wp.queueBackend, wp.commandRegistry, wp.eventBus, wp.logger)
 
 	// Create context for this worker
 	workerCtx, cancel := context.WithCancel(ctx)
 
-	instance := &WorkerInstance{
+	instance := &Instance{
 		id:            workerID,
 		worker:        worker,
 		queues:        queues,
@@ -291,8 +291,8 @@ func (wp *WorkerPool) startWorker(ctx context.Context, workerID string, queues [
 	}()
 
 	// Notify observers
-	wp.eventBus.NotifyObservers(ctx, WorkerEventRegistered, &WorkerEventData{
-		Event:     WorkerEventRegistered,
+	wp.eventBus.NotifyObservers(ctx, EventRegistered, &EventData{
+		Event:     EventRegistered,
 		WorkerID:  workerID,
 		Timestamp: time.Now(),
 		Queue:     queues[0], // Primary queue
@@ -306,7 +306,7 @@ func (wp *WorkerPool) startWorker(ctx context.Context, workerID string, queues [
 }
 
 // taskCoordinatorLoop coordinates task processing across workers
-func (wp *WorkerPool) taskCoordinatorLoop(ctx context.Context) {
+func (wp *Pool) taskCoordinatorLoop(ctx context.Context) {
 	defer close(wp.shutdownComplete)
 
 	for {
@@ -329,7 +329,7 @@ func (wp *WorkerPool) taskCoordinatorLoop(ctx context.Context) {
 }
 
 // healthMonitorLoop performs regular health checks
-func (wp *WorkerPool) healthMonitorLoop(ctx context.Context) {
+func (wp *Pool) healthMonitorLoop(ctx context.Context) {
 	for {
 		select {
 		case <-wp.healthTicker.C:
@@ -347,9 +347,9 @@ func (wp *WorkerPool) healthMonitorLoop(ctx context.Context) {
 }
 
 // performHealthCheck checks the health of all workers
-func (wp *WorkerPool) performHealthCheck(ctx context.Context) {
+func (wp *Pool) performHealthCheck(ctx context.Context) {
 	wp.workersMutex.RLock()
-	workers := make([]*WorkerInstance, 0, len(wp.workers))
+	workers := make([]*Instance, 0, len(wp.workers))
 	for _, worker := range wp.workers {
 		workers = append(workers, worker)
 	}
@@ -368,8 +368,8 @@ func (wp *WorkerPool) performHealthCheck(ctx context.Context) {
 		if now.Sub(lastHeartbeat) > wp.config.HeartbeatInterval*2 {
 			unhealthyWorkers++
 
-			wp.eventBus.NotifyObservers(ctx, WorkerEventUnhealthy, &WorkerEventData{
-				Event:     WorkerEventUnhealthy,
+			wp.eventBus.NotifyObservers(ctx, EventUnhealthy, &EventData{
+				Event:     EventUnhealthy,
 				WorkerID:  worker.id,
 				Timestamp: now,
 				Metadata: map[string]interface{}{
@@ -378,8 +378,8 @@ func (wp *WorkerPool) performHealthCheck(ctx context.Context) {
 				},
 			})
 		} else {
-			wp.eventBus.NotifyObservers(ctx, WorkerEventHealthy, &WorkerEventData{
-				Event:     WorkerEventHealthy,
+			wp.eventBus.NotifyObservers(ctx, EventHealthy, &EventData{
+				Event:     EventHealthy,
 				WorkerID:  worker.id,
 				Timestamp: now,
 			})
@@ -395,7 +395,7 @@ func (wp *WorkerPool) performHealthCheck(ctx context.Context) {
 }
 
 // performMaintenance performs regular maintenance tasks
-func (wp *WorkerPool) performMaintenance(_ context.Context) {
+func (wp *Pool) performMaintenance(_ context.Context) {
 	// Clean up stale worker health data
 	cleaned := wp.healthObserver.Cleanup(5 * time.Minute)
 	if cleaned > 0 {
@@ -411,9 +411,9 @@ func (wp *WorkerPool) performMaintenance(_ context.Context) {
 }
 
 // stopAllWorkers stops all worker instances gracefully
-func (wp *WorkerPool) stopAllWorkers(ctx context.Context) {
+func (wp *Pool) stopAllWorkers(ctx context.Context) {
 	wp.workersMutex.Lock()
-	workers := make([]*WorkerInstance, 0, len(wp.workers))
+	workers := make([]*Instance, 0, len(wp.workers))
 	for _, worker := range wp.workers {
 		workers = append(workers, worker)
 	}
@@ -445,7 +445,7 @@ func (wp *WorkerPool) stopAllWorkers(ctx context.Context) {
 }
 
 // forceStop forcibly stops all workers
-func (wp *WorkerPool) forceStop() {
+func (wp *Pool) forceStop() {
 	wp.workersMutex.Lock()
 	defer wp.workersMutex.Unlock()
 
@@ -455,11 +455,11 @@ func (wp *WorkerPool) forceStop() {
 		worker.cancel()
 	}
 
-	wp.workers = make(map[string]*WorkerInstance)
+	wp.workers = make(map[string]*Instance)
 }
 
 // cleanup performs final cleanup
-func (wp *WorkerPool) cleanup() {
+func (wp *Pool) cleanup() {
 	// Close bulkhead manager
 	if err := wp.bulkheadManager.Close(); err != nil {
 		wp.logger.Error("failed to close bulkhead manager", types.Field{Key: "error", Value: err.Error()})
@@ -476,7 +476,7 @@ func (wp *WorkerPool) cleanup() {
 // Health check callback implementations
 
 // onWorkerUnhealthy handles unhealthy worker notifications
-func (wp *WorkerPool) onWorkerUnhealthy(workerID string, state *WorkerHealthState) {
+func (wp *Pool) onWorkerUnhealthy(workerID string, state *HealthState) {
 	wp.logger.Warn("worker became unhealthy - considering restart",
 		types.Field{Key: "worker_id", Value: workerID},
 		types.Field{Key: "health_score", Value: state.HealthScore},
@@ -486,21 +486,21 @@ func (wp *WorkerPool) onWorkerUnhealthy(workerID string, state *WorkerHealthStat
 }
 
 // onWorkerRecovered handles worker recovery notifications
-func (wp *WorkerPool) onWorkerRecovered(workerID string, state *WorkerHealthState) {
+func (wp *Pool) onWorkerRecovered(workerID string, state *HealthState) {
 	wp.logger.Info("worker recovered",
 		types.Field{Key: "worker_id", Value: workerID},
 		types.Field{Key: "health_score", Value: state.HealthScore})
 }
 
 // onHighFailureRate handles high failure rate notifications
-func (wp *WorkerPool) onHighFailureRate(workerID string, failureRate float64) {
+func (wp *Pool) onHighFailureRate(workerID string, failureRate float64) {
 	wp.logger.Warn("worker has high failure rate",
 		types.Field{Key: "worker_id", Value: workerID},
 		types.Field{Key: "failure_rate", Value: failureRate})
 }
 
 // GetInfo returns information about the worker pool
-func (wp *WorkerPool) GetInfo() *WorkerPoolInfo {
+func (wp *Pool) GetInfo() *PoolInfo {
 	wp.stateMutex.RLock()
 	state := wp.state
 	wp.stateMutex.RUnlock()
@@ -511,7 +511,7 @@ func (wp *WorkerPool) GetInfo() *WorkerPoolInfo {
 
 	hostname, _ := os.Hostname()
 
-	return &WorkerPoolInfo{
+	return &PoolInfo{
 		ID:             wp.id,
 		Hostname:       hostname,
 		State:          state,
@@ -527,10 +527,10 @@ func (wp *WorkerPool) GetInfo() *WorkerPoolInfo {
 }
 
 // WorkerPoolInfo contains information about the worker pool
-type WorkerPoolInfo struct {
+type PoolInfo struct {
 	ID             string             `json:"id"`
 	Hostname       string             `json:"hostname"`
-	State          WorkerPoolState    `json:"state"`
+	State          PoolState          `json:"state"`
 	WorkerCount    int                `json:"worker_count"`
 	Concurrency    int                `json:"concurrency"`
 	Queues         []string           `json:"queues"`
@@ -542,7 +542,7 @@ type WorkerPoolInfo struct {
 }
 
 // getResourceRequirementsForTaskType returns resource requirements for a task type
-func (wp *WorkerPool) getResourceRequirementsForTaskType(taskType types.TaskType) ResourceRequirements {
+func (wp *Pool) getResourceRequirementsForTaskType(taskType types.TaskType) ResourceRequirements {
 	// Default requirements based on task type
 	switch taskType {
 	case types.TaskTypeWebhook:

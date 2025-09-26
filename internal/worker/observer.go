@@ -8,41 +8,41 @@ import (
 	"github.com/2bxtech/taskforge/pkg/types"
 )
 
-// WorkerEvent represents different events in the worker lifecycle
-type WorkerEvent string
+// Event represents different events in the worker lifecycle
+type Event string
 
 const (
 	// Worker lifecycle events
-	WorkerEventStarted    WorkerEvent = "worker_started"
-	WorkerEventStopped    WorkerEvent = "worker_stopped"
-	WorkerEventDraining   WorkerEvent = "worker_draining"
-	WorkerEventHealthy    WorkerEvent = "worker_healthy"
-	WorkerEventUnhealthy  WorkerEvent = "worker_unhealthy"
-	WorkerEventRegistered WorkerEvent = "worker_registered"
+	EventStarted    Event = "worker_started"
+	EventStopped    Event = "worker_stopped"
+	EventDraining   Event = "worker_draining"
+	EventHealthy    Event = "worker_healthy"
+	EventUnhealthy  Event = "worker_unhealthy"
+	EventRegistered Event = "worker_registered"
 
 	// Task processing events
-	TaskEventReceived  WorkerEvent = "task_received"
-	TaskEventStarted   WorkerEvent = "task_started"
-	TaskEventCompleted WorkerEvent = "task_completed"
-	TaskEventFailed    WorkerEvent = "task_failed"
-	TaskEventRetrying  WorkerEvent = "task_retrying"
-	TaskEventTimeout   WorkerEvent = "task_timeout"
+	TaskEventReceived  Event = "task_received"
+	TaskEventStarted   Event = "task_started"
+	TaskEventCompleted Event = "task_completed"
+	TaskEventFailed    Event = "task_failed"
+	TaskEventRetrying  Event = "task_retrying"
+	TaskEventTimeout   Event = "task_timeout"
 
 	// Queue monitoring events
-	QueueEventBacklog    WorkerEvent = "queue_backlog"
-	QueueEventEmpty      WorkerEvent = "queue_empty"
-	QueueEventHighLoad   WorkerEvent = "queue_high_load"
-	QueueEventConnection WorkerEvent = "queue_connection"
+	QueueEventBacklog    Event = "queue_backlog"
+	QueueEventEmpty      Event = "queue_empty"
+	QueueEventHighLoad   Event = "queue_high_load"
+	QueueEventConnection Event = "queue_connection"
 
 	// Circuit breaker events
-	CircuitBreakerOpened   WorkerEvent = "circuit_breaker_opened"
-	CircuitBreakerClosed   WorkerEvent = "circuit_breaker_closed"
-	CircuitBreakerHalfOpen WorkerEvent = "circuit_breaker_half_open"
+	CircuitBreakerOpened   Event = "circuit_breaker_opened"
+	CircuitBreakerClosed   Event = "circuit_breaker_closed"
+	CircuitBreakerHalfOpen Event = "circuit_breaker_half_open"
 )
 
-// WorkerEventData contains detailed information about a worker event
-type WorkerEventData struct {
-	Event     WorkerEvent            `json:"event"`
+// EventData contains detailed information about a worker event
+type EventData struct {
+	Event     Event                  `json:"event"`
 	WorkerID  string                 `json:"worker_id"`
 	Timestamp time.Time              `json:"timestamp"`
 	TaskID    string                 `json:"task_id,omitempty"`
@@ -64,11 +64,11 @@ type WorkerEventData struct {
 	ActiveWorkers int   `json:"active_workers,omitempty"`
 }
 
-// WorkerObserver defines the interface for observing worker events
+// Observer defines the interface for observing worker events
 // This enables the Observer pattern for monitoring and reacting to worker state changes
-type WorkerObserver interface {
+type Observer interface {
 	// OnWorkerEvent is called when a worker event occurs
-	OnWorkerEvent(ctx context.Context, data *WorkerEventData)
+	OnWorkerEvent(ctx context.Context, data *EventData)
 
 	// GetObserverID returns a unique identifier for this observer
 	GetObserverID() string
@@ -77,42 +77,42 @@ type WorkerObserver interface {
 	IsActive() bool
 }
 
-// WorkerSubject defines the interface for objects that can be observed
+// Subject defines the interface for objects that can be observed
 // Workers implement this interface to support the Observer pattern
-type WorkerSubject interface {
+type Subject interface {
 	// RegisterObserver adds an observer to receive events
-	RegisterObserver(observer WorkerObserver)
+	RegisterObserver(observer Observer)
 
 	// UnregisterObserver removes an observer
 	UnregisterObserver(observerID string)
 
 	// NotifyObservers sends an event to all registered observers
-	NotifyObservers(ctx context.Context, event WorkerEvent, data *WorkerEventData)
+	NotifyObservers(ctx context.Context, event Event, data *EventData)
 }
 
-// WorkerEventBus implements a centralized event bus for worker events
+// EventBus implements a centralized event bus for worker events
 // It manages multiple observers and provides event routing
-type WorkerEventBus struct {
-	observers map[string]WorkerObserver
+type EventBus struct {
+	observers map[string]Observer
 	mutex     sync.RWMutex
 	logger    types.Logger
 
 	// Event filtering and routing
-	eventFilters map[string][]WorkerEvent // observerID -> events they care about
+	eventFilters map[string][]Event // observerID -> events they care about
 
 	// Buffering for high-throughput scenarios
-	eventBuffer    chan *WorkerEventData
+	eventBuffer    chan *EventData
 	bufferSize     int
 	processingDone chan struct{}
 }
 
-// NewWorkerEventBus creates a new event bus for worker monitoring
-func NewWorkerEventBus(logger types.Logger, bufferSize int) *WorkerEventBus {
-	bus := &WorkerEventBus{
-		observers:      make(map[string]WorkerObserver),
-		eventFilters:   make(map[string][]WorkerEvent),
+// NewEventBus creates a new event bus for worker monitoring
+func NewEventBus(logger types.Logger, bufferSize int) *EventBus {
+	bus := &EventBus{
+		observers:      make(map[string]Observer),
+		eventFilters:   make(map[string][]Event),
 		logger:         logger,
-		eventBuffer:    make(chan *WorkerEventData, bufferSize),
+		eventBuffer:    make(chan *EventData, bufferSize),
 		bufferSize:     bufferSize,
 		processingDone: make(chan struct{}),
 	}
@@ -124,7 +124,7 @@ func NewWorkerEventBus(logger types.Logger, bufferSize int) *WorkerEventBus {
 }
 
 // RegisterObserver adds an observer to receive all events
-func (bus *WorkerEventBus) RegisterObserver(observer WorkerObserver) {
+func (bus *EventBus) RegisterObserver(observer Observer) {
 	bus.mutex.Lock()
 	defer bus.mutex.Unlock()
 
@@ -137,7 +137,7 @@ func (bus *WorkerEventBus) RegisterObserver(observer WorkerObserver) {
 }
 
 // RegisterObserverWithFilter adds an observer that only receives specific events
-func (bus *WorkerEventBus) RegisterObserverWithFilter(observer WorkerObserver, events []WorkerEvent) {
+func (bus *EventBus) RegisterObserverWithFilter(observer Observer, events []Event) {
 	bus.mutex.Lock()
 	defer bus.mutex.Unlock()
 
@@ -152,7 +152,7 @@ func (bus *WorkerEventBus) RegisterObserverWithFilter(observer WorkerObserver, e
 }
 
 // UnregisterObserver removes an observer
-func (bus *WorkerEventBus) UnregisterObserver(observerID string) {
+func (bus *EventBus) UnregisterObserver(observerID string) {
 	bus.mutex.Lock()
 	defer bus.mutex.Unlock()
 
@@ -165,9 +165,9 @@ func (bus *WorkerEventBus) UnregisterObserver(observerID string) {
 }
 
 // NotifyObservers sends an event to all registered observers (async)
-func (bus *WorkerEventBus) NotifyObservers(ctx context.Context, event WorkerEvent, data *WorkerEventData) {
+func (bus *EventBus) NotifyObservers(_ context.Context, event Event, data *EventData) {
 	if data == nil {
-		data = &WorkerEventData{}
+		data = &EventData{}
 	}
 
 	// Ensure required fields are set
@@ -190,7 +190,7 @@ func (bus *WorkerEventBus) NotifyObservers(ctx context.Context, event WorkerEven
 }
 
 // processEvents handles event distribution to observers in a separate goroutine
-func (bus *WorkerEventBus) processEvents() {
+func (bus *EventBus) processEvents() {
 	defer close(bus.processingDone)
 
 	for eventData := range bus.eventBuffer {
@@ -199,10 +199,10 @@ func (bus *WorkerEventBus) processEvents() {
 }
 
 // distributeEvent sends an event to all relevant observers
-func (bus *WorkerEventBus) distributeEvent(ctx context.Context, eventData *WorkerEventData) {
+func (bus *EventBus) distributeEvent(ctx context.Context, eventData *EventData) {
 	bus.mutex.RLock()
-	observers := make(map[string]WorkerObserver)
-	filters := make(map[string][]WorkerEvent)
+	observers := make(map[string]Observer)
+	filters := make(map[string][]Event)
 
 	// Copy current observers and filters
 	for id, observer := range bus.observers {
@@ -225,7 +225,7 @@ func (bus *WorkerEventBus) distributeEvent(ctx context.Context, eventData *Worke
 		}
 
 		// Send event to observer in a separate goroutine to prevent blocking
-		go func(obs WorkerObserver, data *WorkerEventData) {
+		go func(obs Observer, data *EventData) {
 			defer func() {
 				if r := recover(); r != nil {
 					bus.logger.Error("observer panic",
@@ -244,7 +244,7 @@ func (bus *WorkerEventBus) distributeEvent(ctx context.Context, eventData *Worke
 }
 
 // eventMatchesFilter checks if an event matches the observer's filter
-func (bus *WorkerEventBus) eventMatchesFilter(event WorkerEvent, filter []WorkerEvent) bool {
+func (bus *EventBus) eventMatchesFilter(event Event, filter []Event) bool {
 	for _, filteredEvent := range filter {
 		if event == filteredEvent {
 			return true
@@ -254,29 +254,29 @@ func (bus *WorkerEventBus) eventMatchesFilter(event WorkerEvent, filter []Worker
 }
 
 // Close shuts down the event bus gracefully
-func (bus *WorkerEventBus) Close() error {
+func (bus *EventBus) Close() error {
 	close(bus.eventBuffer)
 	<-bus.processingDone
 
 	bus.mutex.Lock()
 	defer bus.mutex.Unlock()
 
-	bus.observers = make(map[string]WorkerObserver)
-	bus.eventFilters = make(map[string][]WorkerEvent)
+	bus.observers = make(map[string]Observer)
+	bus.eventFilters = make(map[string][]Event)
 
 	bus.logger.Info("worker event bus closed")
 	return nil
 }
 
 // GetObserverCount returns the number of registered observers
-func (bus *WorkerEventBus) GetObserverCount() int {
+func (bus *EventBus) GetObserverCount() int {
 	bus.mutex.RLock()
 	defer bus.mutex.RUnlock()
 	return len(bus.observers)
 }
 
 // GetActiveObserverCount returns the number of active observers
-func (bus *WorkerEventBus) GetActiveObserverCount() int {
+func (bus *EventBus) GetActiveObserverCount() int {
 	bus.mutex.RLock()
 	defer bus.mutex.RUnlock()
 
