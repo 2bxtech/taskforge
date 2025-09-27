@@ -77,7 +77,18 @@ type RateLimitSettings struct {
 func DefaultBulkheadConfig() BulkheadConfig {
 	memStats := &runtime.MemStats{}
 	runtime.ReadMemStats(memStats)
-	availableMemoryMB := int(memStats.Sys / 1024 / 1024)
+
+	// Safe conversion from uint64 to int with overflow protection
+	memoryMB := memStats.Sys / 1024 / 1024
+	var availableMemoryMB int
+
+	// Check for potential overflow before conversion
+	if memoryMB > uint64(^uint(0)>>1) {
+		// If memory exceeds int max, cap at a reasonable limit (16GB)
+		availableMemoryMB = 16384
+	} else {
+		availableMemoryMB = int(memoryMB)
+	}
 
 	return BulkheadConfig{
 		MaxTotalMemoryMB:   availableMemoryMB / 2, // Use half of available memory

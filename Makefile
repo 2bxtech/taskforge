@@ -146,7 +146,7 @@ ci: lint test ## Run CI pipeline locally
 	$(GOTEST) -race -covermode=atomic -coverprofile=coverage.out -v ./...
 	@echo "$(GREEN)CI pipeline completed successfully!$(NC)"
 
-demo: build-demo ## Run Redis queue demo
+redis-demo: build-demo ## Run Redis queue demo
 	@echo "$(BLUE)Running TaskForge Redis Queue Demo...$(NC)"
 	@if [ -f "$(DEMO_BINARY)" ]; then \
 		echo "🔨 Running built Redis demo..."; \
@@ -160,7 +160,7 @@ demo: build-demo ## Run Redis queue demo
 	fi
 	@echo "$(GREEN)Demo completed!$(NC)"
 
-worker-engine-demo: build-worker-engine-demo ## Run worker engine demo
+worker-demo: build-worker-engine-demo ## Run worker engine demo
 	@echo "$(BLUE)Running TaskForge Worker Engine Demo...$(NC)"
 	@echo "$(YELLOW)Make sure Redis is running (docker-compose up redis -d)$(NC)"
 	@if [ -f "$(WORKER_ENGINE_DEMO_BINARY)" ]; then \
@@ -174,6 +174,18 @@ worker-engine-demo: build-worker-engine-demo ## Run worker engine demo
 		exit 1; \
 	fi
 	@echo "$(GREEN)Worker engine demo completed!$(NC)"
+
+# Backwards compatibility and convenience aliases
+demo: redis-demo ## Alias for redis-demo (backwards compatibility)
+
+demo-all: ## Run both Redis and Worker engine demos
+	@echo "$(BLUE)Running all TaskForge demos...$(NC)"
+	@echo "$(YELLOW)1. Redis Queue Demo$(NC)"
+	@make redis-demo
+	@echo ""
+	@echo "$(YELLOW)2. Worker Engine Demo$(NC)"
+	@make worker-demo
+	@echo "$(GREEN)All demos completed!$(NC)"
 
 integration-test: ## Run integration tests (alias for test-integration)
 	@make test-integration
