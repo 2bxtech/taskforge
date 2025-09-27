@@ -21,6 +21,7 @@ WORKER_BINARY=$(BINARY_DIR)/taskforge-worker
 SCHEDULER_BINARY=$(BINARY_DIR)/taskforge-scheduler
 CLI_BINARY=$(BINARY_DIR)/taskforge-cli
 DEMO_BINARY=$(BINARY_DIR)/redis-demo
+WORKER_ENGINE_DEMO_BINARY=$(BINARY_DIR)/worker-engine-demo
 
 # Docker parameters
 DOCKER_REGISTRY=2bxtech
@@ -57,12 +58,24 @@ build: deps ## Build all binaries
 build-demo: deps ## Build demo binary
 	@echo "$(BLUE)Building demo binary...$(NC)"
 	@mkdir -p $(BINARY_DIR)
-	@if [ -f "./examples/redis_demo.go" ]; then \
-		$(GOBUILD) -o $(DEMO_BINARY) ./examples/redis_demo.go; \
-		echo "$(GREEN)Demo binary built successfully!$(NC)"; \
+	@if [ -f "./examples/redis-demo/main.go" ]; then \
+		$(GOBUILD) -o $(DEMO_BINARY) ./examples/redis-demo/main.go; \
+		echo "$(GREEN)Redis demo binary built successfully!$(NC)"; \
 	else \
-		echo "$(YELLOW)Demo source not found, skipping demo build$(NC)"; \
+		echo "$(YELLOW)Redis demo source not found, skipping Redis demo build$(NC)"; \
 	fi
+	@if [ -f "./examples/worker-engine-demo/main.go" ]; then \
+		$(GOBUILD) -o $(WORKER_ENGINE_DEMO_BINARY) ./examples/worker-engine-demo/main.go; \
+		echo "$(GREEN)Worker engine demo binary built successfully!$(NC)"; \
+	else \
+		echo "$(YELLOW)Worker engine demo source not found, skipping worker engine demo build$(NC)"; \
+	fi
+
+build-worker-engine-demo: deps ## Build worker engine demo binary
+	@echo "$(BLUE)Building worker engine demo binary...$(NC)"
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) -o $(WORKER_ENGINE_DEMO_BINARY) ./examples/worker-engine-demo/main.go
+	@echo "$(GREEN)Worker engine demo binary built successfully!$(NC)"
 
 build-api: deps ## Build API server binary
 	@echo "$(BLUE)Building API server...$(NC)"
@@ -133,19 +146,46 @@ ci: lint test ## Run CI pipeline locally
 	$(GOTEST) -race -covermode=atomic -coverprofile=coverage.out -v ./...
 	@echo "$(GREEN)CI pipeline completed successfully!$(NC)"
 
-demo: build-demo ## Run Redis queue demo
+redis-demo: build-demo ## Run Redis queue demo
 	@echo "$(BLUE)Running TaskForge Redis Queue Demo...$(NC)"
 	@if [ -f "$(DEMO_BINARY)" ]; then \
 		echo "🔨 Running built Redis demo..."; \
 		./$(DEMO_BINARY); \
-	elif [ -f "./examples/redis_demo.go" ]; then \
+	elif [ -f "./examples/redis-demo/main.go" ]; then \
 		echo "🔨 Building and running Redis demo..."; \
-		go run ./examples/redis_demo.go; \
+		go run ./examples/redis-demo/main.go; \
 	else \
 		echo "❌ Redis demo not found"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)Demo completed!$(NC)"
+
+worker-demo: build-worker-engine-demo ## Run worker engine demo
+	@echo "$(BLUE)Running TaskForge Worker Engine Demo...$(NC)"
+	@echo "$(YELLOW)Make sure Redis is running (docker-compose up redis -d)$(NC)"
+	@if [ -f "$(WORKER_ENGINE_DEMO_BINARY)" ]; then \
+		echo "🔨 Running built worker engine demo..."; \
+		./$(WORKER_ENGINE_DEMO_BINARY); \
+	elif [ -f "./examples/worker-engine-demo/main.go" ]; then \
+		echo "🔨 Building and running worker engine demo..."; \
+		go run ./examples/worker-engine-demo/main.go; \
+	else \
+		echo "❌ Worker engine demo not found"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Worker engine demo completed!$(NC)"
+
+# Backwards compatibility and convenience aliases
+demo: redis-demo ## Alias for redis-demo (backwards compatibility)
+
+demo-all: ## Run both Redis and Worker engine demos
+	@echo "$(BLUE)Running all TaskForge demos...$(NC)"
+	@echo "$(YELLOW)1. Redis Queue Demo$(NC)"
+	@make redis-demo
+	@echo ""
+	@echo "$(YELLOW)2. Worker Engine Demo$(NC)"
+	@make worker-demo
+	@echo "$(GREEN)All demos completed!$(NC)"
 
 integration-test: ## Run integration tests (alias for test-integration)
 	@make test-integration

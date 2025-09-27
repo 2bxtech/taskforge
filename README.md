@@ -5,26 +5,27 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/2bxtech/taskforge)](https://goreportcard.com/report/github.com/2bxtech/taskforge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A distributed task queue system built with Go, demonstrating enterprise-grade patterns and distributed systems architecture.
+A distributed task queue system built with Go, demonstrating distributed systems patterns and fault-tolerant design.
 
-## 🏗️ Current Status
+## ✨ What TaskForge Shows
 
-**Phase 1 Complete**: Core architecture and type system
-- Complete type definitions for task management
-- Interface design for queue backends and workers
-- 6 task types: webhooks, email, image processing, data processing, scheduled tasks, batch operations
-- Configuration system and development tooling
+**Distributed Systems Implementation**
+- Redis Streams with consumer groups for message delivery
+- Worker engine with Observer, Command, and Bulkhead patterns
+- Circuit breakers and rate limiting for fault tolerance
+- Exponential backoff retry with jitter and dead letter queues
 
-**Phase 2A Complete**: Redis Queue Backend ✅
-- Production-ready Redis Streams implementation with consumer groups
-- Factory and Strategy patterns for pluggable queue backends
-- Priority queue system with FIFO ordering within priority levels
-- Comprehensive error handling with exponential backoff retry
-- Dead letter queue (DLQ) handling for failed tasks
-- Batch operations for high-throughput scenarios
-- Comprehensive CI/CD pipeline with security scanning and automated testing
+**Go Code Practices**
+- SOLID principles with dependency injection
+- Interface-driven design for pluggable components
+- Error handling and structured logging
+- Concurrent processing with resource management
 
-**Phase 2B Next**: Worker Engine and CLI interface
+**Design Patterns**
+- Factory and Strategy patterns for extensibility  
+- Observer pattern for event monitoring
+- Bulkhead isolation to prevent cascade failures
+- Priority queues with FIFO ordering within levels
 
 ## 🚀 Quick Demo
 
@@ -32,47 +33,76 @@ A distributed task queue system built with Go, demonstrating enterprise-grade pa
 # Clone and setup
 git clone https://github.com/2bxtech/taskforge.git
 cd taskforge
-make dev-setup
+go mod tidy
 
 # Start Redis (requires Docker)
 docker run -d -p 6379:6379 redis:7-alpine
 
-# Run the Redis queue demo
-make demo
+# Try the demos
+make redis-demo          # Redis queue backend demo
+make worker-demo         # Complete worker engine demo
+make demo-all           # Run both demos
 ```
 
-## 🎯 Goals
+## �️ Architecture Overview
 
-Building a production-quality distributed task queue to explore:
-- Go concurrency patterns
-- Redis Streams for queuing
-- Circuit breaker implementations  
-- Observability with Prometheus/OpenTelemetry
-- Kubernetes deployment patterns
+### Core Components
+- **Queue Backend**: Redis Streams implementation with consumer groups
+- **Worker Engine**: Task processing with resource management  
+- **Task System**: 6 task types (webhook, email, image, data, scheduled, batch)
+- **Observability**: Event monitoring with health tracking
 
-## 🔧 Development Setup
+### Features
+- Consumer groups, retries, dead letter queues
+- Batch operations, connection pooling, priority scheduling
+- Circuit breakers, bulkhead isolation, graceful degradation
+- Health checks, metrics collection, event tracking
+
+## 📊 Project Status
+
+**Phase 1 Complete**: Core architecture and type system  
+**Phase 2A Complete**: Redis Queue Backend with consumer groups  
+**Phase 2B Complete**: Worker Engine with fault tolerance patterns
+
+**Built and tested** - Functional distributed task queue system.
+
+## 🔧 Development
 
 ```bash
-git clone https://github.com/2bxtech/taskforge.git
-cd taskforge
-go mod tidy
-make build  # Builds current foundation
+# Build all components
+make build
+
+# Run tests
+make test
+
+# Run integration tests (requires Redis)
+make test-integration
+
+# Try the demos
+make redis-demo        # Redis queue backend demo  
+make worker-demo       # Worker engine with fault tolerance
+make demo-all         # Run both demos sequentially
 ```
 
-## 📁 Structure
+## 📁 Project Structure
 
-- `pkg/types/` - Core types and interfaces
-- `cmd/` - Application entry points (planned)
-- `internal/` - Implementation packages (Phase 2)
-- `deployments/` - Docker and K8s configs
+```
+├── pkg/types/              # Public interfaces and types
+├── internal/queue/         # Redis queue implementation
+├── internal/worker/        # Worker engine with fault tolerance
+├── cmd/                    # Application entry points
+├── examples/              # Working demonstrations
+└── tests/integration/     # Integration test suite
+```
 
-## 🎯 Learning Focus
+## 🎯 Technical Implementation
 
-- Distributed systems design
-- Go best practices and patterns  
-- Modern observability stack
-- Container orchestration
-- API design and documentation
+- **Go 1.22** with concurrency patterns
+- **Redis Streams** for distributed queuing  
+- **Interface-driven design** with pluggable backends
+- **Testing** with race detection and coverage
+- **Working demos** showing functionality
 
 ---
-*Side project exploring distributed systems concepts with Go*
+
+*A distributed task queue system built with Go and Redis.*
