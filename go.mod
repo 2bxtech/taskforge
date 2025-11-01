@@ -4,7 +4,7 @@ go 1.22.4
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/redis/go-redis/v9 v9.12.1
+	github.com/redis/go-redis/v9 v9.16.0
 )
 
 require (
