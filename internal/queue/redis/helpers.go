@@ -609,10 +609,12 @@ func (r *Queue) GetScheduledTasks(ctx context.Context, before time.Time, limit i
 // same scheduled member, and Redis cannot observe a removed-but-not-enqueued
 // intermediate state.
 func (r *Queue) promoteScheduledRetries(ctx context.Context, queue string, before time.Time, limit int64) error {
-	results, err := r.client.ZRangeByScore(ctx, r.config.ScheduledSetName, &rds.ZRangeBy{
-		Min:   "0",
-		Max:   fmt.Sprintf("%d", before.UnixMilli()),
-		Count: limit,
+	results, err := r.client.ZRangeArgs(ctx, rds.ZRangeArgs{
+		Key:     r.config.ScheduledSetName,
+		Start:   "0",
+		Stop:    fmt.Sprintf("%d", before.UnixMilli()),
+		ByScore: true,
+		Count:   limit,
 	}).Result()
 	if err != nil && err != rds.Nil {
 		return err
