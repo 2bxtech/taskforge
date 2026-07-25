@@ -1,6 +1,6 @@
-# TaskForge Phase 2B: Worker Engine
+# TaskForge Worker Engine
 
-This directory contains the implementation of TaskForge's advanced worker engine, featuring enterprise-grade patterns for fault tolerance, resource management, and observability.
+This directory contains TaskForge's worker engine: a prototype implementation of fault-tolerance, resource-management, and observability patterns for task processing. See [docs/status-and-scope.md](../../docs/status-and-scope.md) for what is implemented versus scaffolding across the whole repository.
 
 ## Architecture Overview
 
@@ -39,17 +39,18 @@ type WorkerPool struct {
 
 **Key Features:**
 - Configurable concurrency levels
-- Automatic worker recovery
 - Graceful shutdown with task completion guarantees
-- Health monitoring with auto-restart capabilities
+- Health monitoring with unhealthy/recovered event notifications
 - Resource usage tracking
+
+Health events are observed and logged, not acted on: `Pool.onWorkerUnhealthy` records the event but does not restart the worker (see `worker_pool.go`). There is no auto-restart implementation today.
 
 ### Worker Implementation
 ```go
 type Worker struct {
     // Processes tasks using command pattern
     // Reports to observers via event bus
-    // Integrates with Phase 2A retry logic
+    // Integrates with the Redis queue backend's retry/DLQ logic
 }
 ```
 
@@ -104,7 +105,7 @@ config := types.DefaultConfig()
 config.Worker.Concurrency = 5
 config.Worker.Queues = []string{"high-priority", "normal", "low"}
 
-// Create queue backend (from Phase 2A)
+// Create queue backend (Redis implementation)
 queueBackend, err := factory.CreateQueueBackend(&config.Queue, logger)
 
 // Create worker pool
@@ -302,9 +303,9 @@ type ServiceCircuitConfig struct {
 }
 ```
 
-## Integration with Phase 2A
+## Integration with the Redis Queue Backend
 
-The worker engine seamlessly integrates with Phase 2A components:
+The worker engine drives the `types.QueueBackend` interface implemented by `internal/queue/redis`:
 
 ### Queue Backend Integration
 ```go
@@ -339,10 +340,10 @@ Run comprehensive unit tests:
 make test
 ```
 
-### Integration Tests  
-Test with real Redis backend:
+### Integration Tests
+Requires Redis on `localhost:6379`; exercises the enqueue → worker execution → retry → DLQ path described in [docs/status-and-scope.md](../../docs/status-and-scope.md):
 ```bash
-make test-integration
+go test -tags=integration ./tests/integration
 ```
 
 ### Worker Engine Demo
@@ -352,7 +353,7 @@ Run the full demo with Redis:
 docker-compose up redis -d
 
 # Run demo
-make worker-engine-demo
+make worker-demo
 ```
 
 ### Benchmarks
@@ -363,33 +364,9 @@ make benchmark
 
 ## Monitoring and Metrics
 
-### Key Metrics
-- **Task Throughput**: Tasks/second per worker
-- **Task Latency**: Processing time distribution
-- **Error Rates**: Failures per task type
-- **Resource Utilization**: Memory/CPU usage
-- **Queue Depths**: Backlog per queue
-- **Circuit Breaker States**: Service health
-- **Worker Health Scores**: Overall worker condition
+`types.MetricsCollector` (`pkg/types/interfaces.go`) defines the metrics hook points the worker engine calls into: task enqueued/started/completed/failed, queue depth, active workers, worker registration, and circuit breaker state transitions.
 
-### Prometheus Integration
-The worker engine exposes metrics compatible with Prometheus:
-```go
-// Task metrics
-taskforge_tasks_processed_total{worker_id, task_type, queue}
-taskforge_task_duration_seconds{worker_id, task_type, queue}  
-taskforge_task_failures_total{worker_id, task_type, error_type}
-
-// Resource metrics  
-taskforge_memory_usage_bytes{worker_id, pool_id}
-taskforge_cpu_usage_percent{worker_id}
-taskforge_active_tasks{worker_id, queue}
-
-// Health metrics
-taskforge_worker_health_score{worker_id}
-taskforge_circuit_breaker_state{service}
-taskforge_queue_depth{queue}
-```
+There is no built-in metrics exporter. Nothing in this repository exposes an HTTP `/metrics` endpoint or ships a Prometheus client. `examples/worker-engine-demo/main.go` implements `MetricsCollector` by logging each call; a real deployment would implement the interface against whatever metrics system it uses (e.g. wrap `github.com/prometheus/client_golang` counters/histograms per method) and serve them itself.
 
 ## Deployment
 
@@ -416,32 +393,16 @@ config := &types.WorkerConfig{
 - **Resource Isolation**: Task-type-specific resource pools
 - **Circuit Breakers**: Prevent cascade failures
 
-### Monitoring Alerts
+### Suggested Alert Thresholds
+These are not wired to any built-in alerting; they are starting points for an operator's own monitoring stack, driven off `HealthState.HealthScore` and `BulkheadStats`:
 - Worker health score < 0.5 (unhealthy)
-- Circuit breaker open for > 5 minutes
-- Queue depth > 1000 tasks  
-- Memory usage > 85%
-- CPU usage > 90%
-- Task failure rate > 10%
+- Circuit breaker open for an extended period
+- Queue depth growing without corresponding worker throughput
+- Bulkhead rejected-request count rising
 
 ## Performance Characteristics
 
-### Throughput
-- **High Priority Tasks**: 1000+ tasks/second
-- **Normal Priority**: 500+ tasks/second  
-- **Batch Operations**: 50+ tasks/second
-
-### Latency
-- **Task Pickup**: < 100ms from Redis
-- **Processing Start**: < 50ms after pickup
-- **Health Checks**: < 10ms per check
-- **Event Propagation**: < 5ms to observers
-
-### Resource Usage
-- **Base Memory**: ~50MB per worker pool
-- **Per Task**: Configurable via ResourceRequirements
-- **CPU Overhead**: ~5% for monitoring and coordination
-- **Network**: Minimal (Redis heartbeats only)
+No throughput or latency numbers are published here. `internal/worker/worker_test.go` and `internal/queue/redis/redis_test.go` contain component-level benchmarks (`go test -bench=. -benchmem ./...`), but there is no end-to-end throughput benchmark for the worker engine, so no headline number would be honest. If you need throughput/latency figures for your workload, run `make benchmark` and the integration test against your own Redis deployment and measure it there.
 
 ## Troubleshooting
 
@@ -460,18 +421,15 @@ logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 ```
 
 ### Diagnostic Commands
+There is no HTTP health/metrics server in this repository. Diagnostics go through code or `redis-cli` directly:
+```go
+// Worker pool status and per-worker info
+info := workerPool.GetInfo()   // see worker_pool.go
+```
 ```bash
-# Check worker health
-curl http://localhost:9090/health
-
-# View metrics
-curl http://localhost:9090/metrics
-
-# Check queue stats  
-redis-cli -c XLEN taskforge:queue:default
-
-# View circuit breaker states
-curl http://localhost:8080/api/v1/circuit-breakers
+# Check queue stats directly in Redis
+redis-cli -c XLEN taskforge:stream:default
+redis-cli -c ZCARD taskforge:scheduled
 ```
 
 ## Future Enhancements

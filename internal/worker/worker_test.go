@@ -202,6 +202,13 @@ func TestWorkerEventBus(t *testing.T) {
 	}
 }
 
+func TestDefaultBulkheadConfigUsesExplicitMemoryBudget(t *testing.T) {
+	config := DefaultBulkheadConfig()
+	if config.MaxTotalMemoryMB != defaultMaxTotalMemoryMB {
+		t.Fatalf("MaxTotalMemoryMB = %d, want %d", config.MaxTotalMemoryMB, defaultMaxTotalMemoryMB)
+	}
+}
+
 // Test TaskCommandRegistry
 func TestTaskCommandRegistry(t *testing.T) {
 	logger := NewTestLogger()

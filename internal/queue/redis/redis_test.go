@@ -131,6 +131,10 @@ func TestDefaultConfig(t *testing.T) {
 	if config.StreamPrefix != "taskforge:stream:" {
 		t.Errorf("Expected default stream prefix 'taskforge:stream:', got '%s'", config.StreamPrefix)
 	}
+
+	if config.ScheduledSetName != "taskforge:scheduled" {
+		t.Errorf("Expected default scheduled set name 'taskforge:scheduled', got '%s'", config.ScheduledSetName)
+	}
 }
 
 func TestConfig_MergeWithDefaults(t *testing.T) {
@@ -157,6 +161,10 @@ func TestConfig_MergeWithDefaults(t *testing.T) {
 
 	if merged.ConsumerGroup == "" {
 		t.Errorf("Expected consumer group to be filled from defaults")
+	}
+
+	if merged.ScheduledSetName == "" {
+		t.Errorf("Expected scheduled set name to be filled from defaults")
 	}
 }
 

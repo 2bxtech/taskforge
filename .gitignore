@@ -8,6 +8,7 @@
 # Go build artifacts
 bin/
 dist/
+.cache/
 *.out
 
 # Test binary, built with `go test -c`

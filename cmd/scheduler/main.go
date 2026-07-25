@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 func main() {
-	// TODO: Implement scheduler service
+	fmt.Println("TaskForge scheduler scaffold: standalone scheduling is not implemented")
 }

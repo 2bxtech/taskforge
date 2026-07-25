@@ -1,6 +1,6 @@
 # TaskForge Redis Queue Backend
 
-This document covers the Redis Queue Backend implementation in TaskForge.
+This document covers the Redis Queue Backend implementation in TaskForge. See [docs/status-and-scope.md](../../docs/status-and-scope.md) for what is implemented versus scaffolding across the whole repository.
 
 ## Architecture Overview
 
@@ -28,7 +28,7 @@ internal/queue/
 └── README.md            # This documentation
 
 examples/
-└── redis_demo.go        # Complete usage demonstration
+└── redis-demo/main.go   # Complete usage demonstration
 ```
 
 ## Core Components
@@ -226,10 +226,8 @@ taskforge:stream:{queue_name}:dlq      # Dead letter queue
 
 ### Integration Tests
 
-- Real Redis connection testing
-- End-to-end message flow
-- Consumer group behavior
-- Failure recovery scenarios
+- `redis_test.go`'s `TestConnectionManager_Integration` checks connectivity/health-check against a real Redis instance (skips if unreachable).
+- `tests/integration/delivery_path_test.go` (`go test -tags=integration ./tests/integration`) drives a real worker through enqueue → execution → scheduled retry → second execution → dead-letter, against a real Redis instance.
 
 ### Mock Implementation
 
@@ -386,37 +384,23 @@ config := &redis.Config{
 
 ## Performance Characteristics
 
-### Throughput
-
-- **Single Task Operations**: ~10,000 ops/second
-- **Batch Operations**: ~50,000 tasks/second in batches of 100
-- **Dequeue Operations**: ~5,000 ops/second with 1s timeout
-
-### Memory Usage
-
-- **Per Task Overhead**: ~1KB (serialized JSON + Redis metadata)
-- **Connection Pool**: Configurable, default 10 connections
-- **Stream Trimming**: Automatic with configurable limits
+No throughput or memory numbers are published here. `redis_test.go` has component-level benchmarks (`go test -bench=. -benchmem ./internal/queue/redis`) covering serialization, but there is no benchmarked end-to-end throughput figure for enqueue/dequeue against a real Redis instance, so none is claimed. Measure against your own deployment if you need one.
 
 ### Scalability
 
-- **Horizontal Scaling**: Multiple workers across machines
-- **Queue Isolation**: Independent queues for different workloads
-- **Priority Lanes**: Critical tasks bypass normal queues
+- **Horizontal Scaling**: Multiple worker processes can consume from the same consumer group
+- **Queue Isolation**: Independent streams per queue name
+- **Priority Lanes**: Sorted-set score ordering biases dequeue toward higher priority, FIFO within a priority level
 
 ## Security Considerations
 
 ### Authentication
 
-- Redis AUTH support via password configuration
-- TLS connection support (configurable)
-- Network-level security (VPC, firewall rules)
+- Redis AUTH support via `Config.Password`
 
-### Data Security
+### Not implemented
 
-- Task payload encryption (application-level)
-- Secure credential handling
-- Audit logging for sensitive operations
+The following are common queue-backend security features that this repository does **not** implement: TLS to Redis, application-level payload encryption, and audit logging. `pkg/types/config.go` reserves an `EncryptionConfig` struct as a placeholder for future design; nothing currently reads it. Network-level security (VPC, firewall rules, `redis-server --tls-*`) is the operator's responsibility and is outside this codebase.
 
 ## Troubleshooting
 
@@ -493,8 +477,4 @@ config := &redis.Config{
 - [Redis Streams Documentation](https://redis.io/topics/streams-intro)
 - [Go Redis Client](https://github.com/redis/go-redis)
 - [SOLID Principles in Go](https://dave.cheney.net/2016/08/20/solid-go-design)
-- [TaskForge Technical Documentation](../taskforge%20context%20tech%20doc.txt)
-
----
-
-This Redis Queue Backend implementation uses standard Go development patterns with comprehensive error handling and distributed systems features.
+- [docs/status-and-scope.md](../../docs/status-and-scope.md)
