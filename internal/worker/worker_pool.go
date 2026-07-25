@@ -233,19 +233,19 @@ func (wp *Pool) Stop(ctx context.Context) error {
 		wp.forceStop()
 	}
 
-	// Clean up resources
-	wp.cleanup()
-
 	wp.stateMutex.Lock()
 	wp.state = PoolStateStopped
 	wp.stateMutex.Unlock()
 
-	// Final notification
+	// Send the final notification before cleanup closes the event bus.
 	wp.eventBus.NotifyObservers(context.Background(), EventStopped, &EventData{
 		Event:     EventStopped,
 		WorkerID:  wp.id,
 		Timestamp: time.Now(),
 	})
+
+	// Clean up resources
+	wp.cleanup()
 
 	return nil
 }

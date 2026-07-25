@@ -8,6 +8,8 @@ import (
 	"github.com/2bxtech/taskforge/pkg/types"
 )
 
+const defaultMaxTotalMemoryMB = 512
+
 // BulkheadManager implements the Bulkhead pattern for failure isolation
 // It manages resource pools and circuit breakers to prevent cascade failures
 type BulkheadManager struct {
@@ -75,23 +77,10 @@ type RateLimitSettings struct {
 
 // DefaultBulkheadConfig returns sensible default bulkhead configuration
 func DefaultBulkheadConfig() BulkheadConfig {
-	memStats := &runtime.MemStats{}
-	runtime.ReadMemStats(memStats)
-
-	// Safe conversion from uint64 to int with overflow protection
-	memoryMB := memStats.Sys / 1024 / 1024
-	var availableMemoryMB int
-
-	// Check for potential overflow before conversion
-	if memoryMB > uint64(^uint(0)>>1) {
-		// If memory exceeds int max, cap at a reasonable limit (16GB)
-		availableMemoryMB = 16384
-	} else {
-		availableMemoryMB = int(memoryMB)
-	}
-
 	return BulkheadConfig{
-		MaxTotalMemoryMB:   availableMemoryMB / 2, // Use half of available memory
+		// This is a logical admission-control budget, not a measurement of host
+		// memory. Callers should override it for their workload and environment.
+		MaxTotalMemoryMB:   defaultMaxTotalMemoryMB,
 		MaxTotalCPUPercent: 80,
 		MaxConcurrentTasks: runtime.NumCPU() * 4,
 

@@ -216,6 +216,10 @@ func (r *Queue) scheduleRetry(ctx context.Context, task *types.Task, reason stri
 	task.NextRetryAt = &nextRetry
 	task.Status = types.TaskStatusPending
 
+	if err := r.UpdateTask(ctx, task); err != nil {
+		return fmt.Errorf("failed to persist retry state: %w", err)
+	}
+
 	// If retry time is in the future, schedule it
 	if nextRetry.After(time.Now()) {
 		return r.ScheduleRetry(ctx, task.ID, nextRetry)
@@ -445,6 +449,17 @@ func (r *Queue) MoveToDLQ(ctx context.Context, taskID string, reason string) err
 		prioritySetName := r.config.GetPrioritySetName(task.Queue)
 		pipe.ZRem(ctx, prioritySetName, taskID)
 
+		// Acknowledge the delivery that exhausted its retries so it cannot be
+		// reclaimed from the consumer group's pending-entry list.
+		streamName := r.config.GetStreamName(task.Queue)
+		entryID, findErr := r.findStreamEntryID(ctx, streamName, taskID)
+		if findErr != nil {
+			return fmt.Errorf("failed to find stream entry for DLQ: %w", findErr)
+		}
+		if entryID != "" {
+			pipe.XAck(ctx, streamName, r.config.ConsumerGroup, entryID)
+		}
+
 		// Update task status
 		taskHashKey := r.config.GetTaskHashKey(taskID)
 		pipe.HSet(ctx, taskHashKey, map[string]interface{}{
@@ -508,18 +523,35 @@ func (r *Queue) ScheduleRetry(ctx context.Context, taskID string, retryAt time.T
 	}
 
 	return r.connMgr.WithRetry(ctx, func() error {
-		// For now, we'll implement a simple approach
-		// In a larger system, you might use a separate scheduled tasks system
+		task, err := r.GetTask(ctx, taskID)
+		if err != nil {
+			return fmt.Errorf("failed to get task for retry: %w", err)
+		}
+		if task == nil {
+			return fmt.Errorf("task not found: %s", taskID)
+		}
 
-		// Update the task's retry time
 		taskHashKey := r.config.GetTaskHashKey(taskID)
+		streamName := r.config.GetStreamName(task.Queue)
+		entryID, err := r.findStreamEntryID(ctx, streamName, taskID)
+		if err != nil {
+			return fmt.Errorf("failed to find stream entry for retry: %w", err)
+		}
 
-		err := r.client.HSet(ctx, taskHashKey, map[string]interface{}{
+		pipe := r.client.TxPipeline()
+		pipe.HSet(ctx, taskHashKey, map[string]interface{}{
 			"next_retry_at": retryAt.Unix(),
 			"status":        string(types.TaskStatusPending),
-		}).Err()
-
-		if err != nil {
+		})
+		pipe.ZAdd(ctx, r.config.ScheduledSetName, rds.Z{
+			Score:  float64(retryAt.UnixMilli()),
+			Member: taskID,
+		})
+		pipe.ZRem(ctx, r.config.GetPrioritySetName(task.Queue), taskID)
+		if entryID != "" {
+			pipe.XAck(ctx, streamName, r.config.ConsumerGroup, entryID)
+		}
+		if _, err := pipe.Exec(ctx); err != nil {
 			return fmt.Errorf("failed to schedule retry: %w", err)
 		}
 
@@ -541,13 +573,10 @@ func (r *Queue) GetScheduledTasks(ctx context.Context, before time.Time, limit i
 	err := r.connMgr.WithRetry(ctx, func() error {
 		// Use ZRANGEBYSCORE to efficiently get tasks scheduled before 'before' time
 		// In a sorted set, task IDs are members and next_retry_at timestamps are scores
-		// Use a global scheduled set that contains tasks from all queues
-		scheduledSetKey := "taskforge:scheduled"
-
 		// Get task IDs with scores (timestamps) less than the 'before' time
-		results, err := r.client.ZRangeByScoreWithScores(ctx, scheduledSetKey, &rds.ZRangeBy{
+		results, err := r.client.ZRangeByScoreWithScores(ctx, r.config.ScheduledSetName, &rds.ZRangeBy{
 			Min:    "0",
-			Max:    fmt.Sprintf("%d", before.Unix()),
+			Max:    fmt.Sprintf("%d", before.UnixMilli()),
 			Offset: 0,
 			Count:  int64(limit),
 		}).Result()
@@ -573,4 +602,97 @@ func (r *Queue) GetScheduledTasks(ctx context.Context, before time.Time, limit i
 	})
 
 	return tasks, err
+}
+
+// promoteScheduledRetries atomically removes due retries from the schedule and
+// appends their replacement delivery. Concurrent workers cannot promote the
+// same scheduled member, and Redis cannot observe a removed-but-not-enqueued
+// intermediate state.
+func (r *Queue) promoteScheduledRetries(ctx context.Context, queue string, before time.Time, limit int64) error {
+	results, err := r.client.ZRangeByScore(ctx, r.config.ScheduledSetName, &rds.ZRangeBy{
+		Min:   "0",
+		Max:   fmt.Sprintf("%d", before.UnixMilli()),
+		Count: limit,
+	}).Result()
+	if err != nil && err != rds.Nil {
+		return err
+	}
+
+	for _, taskID := range results {
+		task, err := r.GetTask(ctx, taskID)
+		if err != nil {
+			return err
+		}
+		if task == nil {
+			r.client.ZRem(ctx, r.config.ScheduledSetName, taskID)
+			continue
+		}
+		if task.Queue != queue {
+			continue
+		}
+
+		task.NextRetryAt = nil
+		promoted, err := r.promoteScheduledTask(ctx, task)
+		if err != nil {
+			return err
+		}
+		if promoted {
+			r.logger.Info("scheduled retry promoted",
+				types.Field{Key: "task_id", Value: task.ID},
+				types.Field{Key: "queue", Value: task.Queue},
+			)
+		}
+	}
+	return nil
+}
+
+func (r *Queue) promoteScheduledTask(ctx context.Context, task *types.Task) (bool, error) {
+	taskData, err := r.serializer.Serialize(task)
+	if err != nil {
+		return false, fmt.Errorf("failed to serialize scheduled retry: %w", err)
+	}
+
+	const promoteScript = `
+if redis.call("ZSCORE", KEYS[1], ARGV[1]) == false then
+	return 0
+end
+redis.call("ZREM", KEYS[1], ARGV[1])
+redis.call("XADD", KEYS[2], "MAXLEN", "~", ARGV[2], "*",
+	"task_id", ARGV[1],
+	"task_type", ARGV[3],
+	"priority", ARGV[4],
+	"tenant_id", ARGV[5],
+	"created_at", ARGV[6],
+	"payload", ARGV[7])
+redis.call("ZADD", KEYS[3], ARGV[8], ARGV[1])
+redis.call("HSET", KEYS[4],
+	"data", ARGV[7],
+	"status", ARGV[9],
+	"enqueued_at", ARGV[10])
+redis.call("PEXPIRE", KEYS[4], ARGV[11])
+return 1
+`
+
+	result, err := r.client.Eval(ctx, promoteScript, []string{
+		r.config.ScheduledSetName,
+		r.config.GetStreamName(task.Queue),
+		r.config.GetPrioritySetName(task.Queue),
+		r.config.GetTaskHashKey(task.ID),
+	},
+		task.ID,
+		r.config.MaxStreamLength,
+		string(task.Type),
+		string(task.Priority),
+		task.TenantID,
+		task.CreatedAt.Unix(),
+		taskData,
+		r.calculatePriorityScore(task.Priority, task.CreatedAt),
+		string(types.TaskStatusPending),
+		time.Now().Unix(),
+		r.config.TaskTTL.Milliseconds(),
+	).Int64()
+	if err != nil {
+		return false, fmt.Errorf("failed to promote scheduled retry: %w", err)
+	}
+	return result == 1, nil
 }

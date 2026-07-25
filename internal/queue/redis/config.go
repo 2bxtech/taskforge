@@ -32,6 +32,7 @@ type Config struct {
 
 	// Priority queue settings
 	PrioritySetPrefix string `json:"priority_set_prefix" yaml:"priority_set_prefix"` // Prefix for priority sorted sets
+	ScheduledSetName  string `json:"scheduled_set_name" yaml:"scheduled_set_name"`   // Global retry schedule sorted set
 
 	// Dead letter queue settings
 	DLQSuffix     string `json:"dlq_suffix" yaml:"dlq_suffix"`           // Suffix for DLQ stream names
@@ -92,6 +93,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("consumer group is required")
 	}
 
+	if c.ScheduledSetName == "" {
+		return fmt.Errorf("scheduled set name is required")
+	}
+
 	if c.BlockTime < 0 {
 		return fmt.Errorf("block time cannot be negative")
 	}
@@ -127,6 +132,7 @@ func DefaultConfig() *Config {
 
 		// Priority queue settings
 		PrioritySetPrefix: "taskforge:priority:",
+		ScheduledSetName:  "taskforge:scheduled",
 
 		// Dead letter queue settings
 		DLQSuffix:     ":dlq",
@@ -191,6 +197,9 @@ func (c *Config) MergeWithDefaults() *Config {
 	}
 	if c.PrioritySetPrefix == "" {
 		c.PrioritySetPrefix = defaults.PrioritySetPrefix
+	}
+	if c.ScheduledSetName == "" {
+		c.ScheduledSetName = defaults.ScheduledSetName
 	}
 	if c.DLQSuffix == "" {
 		c.DLQSuffix = defaults.DLQSuffix

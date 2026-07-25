@@ -149,6 +149,10 @@ func (r *Queue) Dequeue(ctx context.Context, queue string, timeout time.Duration
 		queue = "default"
 	}
 
+	if err := r.promoteScheduledRetries(ctx, queue, time.Now(), 100); err != nil {
+		return nil, fmt.Errorf("failed to promote scheduled retries: %w", err)
+	}
+
 	// Ensure consumer group exists
 	if err := r.ensureConsumerGroup(ctx, queue); err != nil {
 		r.logger.Warn("failed to ensure consumer group",
