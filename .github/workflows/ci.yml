@@ -61,7 +61,7 @@ jobs:
         go build -o bin/worker-engine-demo ./examples/worker-engine-demo
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
         file: ./coverage.out
         flags: unittests
